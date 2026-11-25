@@ -1,0 +1,58 @@
+name: gdelt-backfill
+
+on:
+  workflow_dispatch:
+    inputs:
+      from_month:
+        description: First month (YYYY-MM)
+        default: "2015-02"
+      to_month:
+        description: Last month (YYYY-MM), empty = current
+        default: ""
+      max_parallel:
+        description: Months fetched at the same time
+        default: "10"
+
+permissions:
+  contents: read
+
+jobs:
+  months:
+    runs-on: ubuntu-latest
+    outputs:
+      list: ${{ steps.m.outputs.list }}
+    steps:
+      - id: m
+        env:
+          FROM: ${{ inputs.from_month }}
+          TO: ${{ inputs.to_month }}
+        run: |
+          python3 - >> "$GITHUB_OUTPUT" <<'PY'
+          import datetime, json, os
+          y, m = map(int, os.environ["FROM"].split("-"))
+          to = os.environ["TO"] or datetime.date.today().strftime("%Y-%m")
+          ty, tm = map(int, to.split("-"))
+          out = []
+          while (y, m) <= (ty, tm):
+              out.append(f"{y:04d}-{m:02d}")
+              y, m = (y + 1, 1) if m == 12 else (y, m + 1)
+          print("list=" + json.dumps(out[::-1]))  # newest first
+          PY
+
+  backfill:
+    needs: months
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      max-parallel: ${{ fromJSON(inputs.max_parallel) }}
+      matrix:
+        month: ${{ fromJSON(needs.months.outputs.list) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen
+      - name: GDELT ${{ matrix.month }}
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: uv run python -m t2.news.gdelt backfill --month ${{ matrix.month }}

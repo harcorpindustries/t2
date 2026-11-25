@@ -1,0 +1,29 @@
+name: gdelt-daily
+
+on:
+  schedule:
+    - cron: "15 1 * * *"  # 06:45 IST
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gdelt-daily
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen
+      - name: Current and previous month (only missing files are fetched)
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          prev=$(date -u -d "$(date -u +%Y-%m-01) -1 day" +%Y-%m)
+          uv run python -m t2.news.gdelt backfill --month "$prev"
+          uv run python -m t2.news.gdelt backfill --month "$(date -u +%Y-%m)"

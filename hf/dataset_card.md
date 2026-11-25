@@ -26,6 +26,8 @@ configs:
     data_files: corp_actions/**/*.parquet
   - config_name: news
     data_files: news/**/*.parquet
+  - config_name: news_gdelt
+    data_files: news_gdelt/**/*.parquet
   - config_name: news_feed_polls
     data_files: _ledger/news/feed_polls/*.parquet
   - config_name: features
@@ -50,6 +52,7 @@ partitioned by date (`<config>/date=YYYY-MM-DD/part-*.parquet`). History is appe
 | `option_chain` | Broker snapshots | Periodic chain snapshots |
 | `corp_actions` | NSE | Splits, bonuses, dividends, adjustment factors |
 | `news` | News crawler | Exchange filings (NSE RSS), regulator releases (RBI, SEBI), financial press (ET, Mint, Business Standard, BusinessLine) and aggregator headlines; full text where the site allows it, tagged NSE symbols. Event type, sentiment and embeddings are added by later pipelines |
+| `news_gdelt` | GDELT 2.1 GKG (2015-02 onwards) | Historical articles from Indian financial publishers, plus Reuters/Bloomberg India economy stories: time, publisher, URL, title (page title, or headline from the URL slug before 2019), GDELT tone, themes, organizations, persons, tagged NSE symbols. Ledger per 15-minute file in `_ledger/gdelt/` |
 | `features` | Feature pipeline | Versioned model-ready tables |
 | `predictions_trades` | Trader | Predictions, orders, fills, P&L (sandbox and live) |
 
