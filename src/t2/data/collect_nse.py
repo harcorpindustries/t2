@@ -46,6 +46,8 @@ LEDGER_SCHEMA = {
 }
 # NSE publishes after close; treat "not published" as final only once the day is this old.
 SETTLE_DAYS = 7
+# Statuses accepted as final once settled. source_empty = NSE's own archive has a 0-byte file.
+FINAL_IF_SETTLED = ("not_published", "source_empty")
 
 
 def ledger_path(year: int) -> str:
@@ -123,7 +125,8 @@ def days_needing_work(ledger: pl.DataFrame, candidates: list[date], today: date)
     done = {
         (r["date"], r["kind"])
         for r in ledger.iter_rows(named=True)
-        if r["status"] == "ok" or (r["status"] == "not_published" and (today - r["date"]).days >= SETTLE_DAYS)
+        if r["status"] == "ok"
+        or (r["status"] in FINAL_IF_SETTLED and (today - r["date"]).days >= SETTLE_DAYS)
     }
     return [d for d in candidates if any((d, k) not in done for k in KINDS if d >= FIRST_DATE[k])]
 
@@ -179,13 +182,16 @@ def audit() -> dict[str, object]:
         if k not in wide.columns:
             wide = wide.with_columns(pl.lit(None, pl.Utf8).alias(k))
     errors = led.filter(pl.col("status").is_in(["error", "parse_error"]))
-    fo_gap = wide.filter(
-        (pl.col("cm") == "ok") & (pl.col("fo") != "ok") & (pl.col("date") >= date(2000, 6, 12))
-    )
-    cm_gap = wide.filter((pl.col("fo") == "ok") & (pl.col("cm") != "ok"))
+
+    def missing(k: str) -> pl.Expr:
+        return ~pl.col(k).is_in(["ok", "source_empty"]) | pl.col(k).is_null()
+
+    fo_gap = wide.filter((pl.col("cm") == "ok") & missing("fo") & (pl.col("date") >= date(2000, 6, 12)))
+    cm_gap = wide.filter((pl.col("fo") == "ok") & missing("cm"))
+    source_empty = led.filter(pl.col("status") == "source_empty")
     first_mto = led.filter((pl.col("kind") == "mto") & (pl.col("status") == "ok"))["date"].min()
     mto_gap = (
-        wide.filter((pl.col("cm") == "ok") & (pl.col("mto") != "ok") & (pl.col("date") >= first_mto))
+        wide.filter((pl.col("cm") == "ok") & missing("mto") & (pl.col("date") >= first_mto))
         if first_mto is not None
         else wide.head(0)
     )
@@ -198,6 +204,7 @@ def audit() -> dict[str, object]:
             for r in led.group_by("kind", "status").len().iter_rows(named=True)
         },
         "errors": [f"{r['kind']} {r['date']}" for r in errors.iter_rows(named=True)],
+        "known_source_gaps": [f"{r['kind']} {r['date']}" for r in source_empty.iter_rows(named=True)],
         "fo_missing_on_cm_days": [str(d) for d in fo_gap["date"].to_list()],
         "cm_missing_on_fo_days": [str(d) for d in cm_gap["date"].to_list()],
         "mto_missing_on_cm_days": [str(d) for d in mto_gap["date"].to_list()],
