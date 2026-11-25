@@ -96,5 +96,6 @@ def test_errors_are_always_retried() -> None:
 def test_source_empty_is_final_once_settled() -> None:
     today = date(2026, 11, 26)
     old, recent = date(1995, 9, 6), date(2026, 11, 25)
-    assert days_needing_work(_ledger([(old, "cm", "source_empty")]), [old], today) == []
-    assert days_needing_work(_ledger([(recent, "cm", "source_empty")]), [recent], today) == [recent]
+    for d, expected in ((old, []), (recent, [recent])):
+        rows = [(d, "cm", "source_empty"), (d, "fo", "not_published"), (d, "mto", "not_published")]
+        assert days_needing_work(_ledger(rows), [d], today) == expected
