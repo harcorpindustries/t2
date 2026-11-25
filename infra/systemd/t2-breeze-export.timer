@@ -1,0 +1,10 @@
+[Unit]
+Description=Export Breeze intraday candles hourly
+
+[Timer]
+OnCalendar=*:40
+RandomizedDelaySec=60
+Persistent=true
+
+[Install]
+WantedBy=timers.target

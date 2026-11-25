@@ -1,0 +1,13 @@
+[Unit]
+Description=t2 Breeze intraday export to HF
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/opt/t2/app
+EnvironmentFile=/opt/t2/.env
+ExecStart=/usr/local/bin/uv run --frozen python -m t2.data.collect_breeze export
+TimeoutStartSec=1800
+Nice=5
