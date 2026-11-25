@@ -1,0 +1,3 @@
+# Risk limits and live-trading config: owner must approve before merge.
+/src/t2/trader/risk*.py @theharshon
+/config/live/ @theharshon

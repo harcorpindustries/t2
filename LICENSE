@@ -1,0 +1,73 @@
+HARCORP LICENSE
+Version 1.0, November 2026
+
+Copyright (c) 2026 Harcorp Industries. All rights reserved.
+
+1. Definitions
+
+   "Harcorp" means Harcorp Industries and its affiliates.
+   "Software" means everything in this repository, including source code,
+   documentation, specifications, designs, models, weights, data, build files
+   and binaries, and any part, copy or derivative of them.
+   "You" means any person or organization other than Harcorp and its
+   employees and authorized contractors acting for Harcorp.
+
+2. Review only
+
+   The Software is made publicly visible for review only. You may view and
+   read the Software on the platform where Harcorp publishes it, and, as far
+   as that platform's terms of service require, use the platform's own viewing
+   and forking features. Nothing else is permitted.
+
+3. Restrictions
+
+   Without prior written permission signed by Harcorp, You may not:
+   (a) use, run, compile, build, install or deploy the Software;
+   (b) copy, download, mirror or store the Software, except temporary copies
+       made automatically by a browser or by the platform while viewing it;
+   (c) modify the Software or create derivative works from it;
+   (d) distribute, publish, sublicense, sell, rent, lend or otherwise make the
+       Software available to anyone;
+   (e) use the Software, or any part of its design, specification or ideas
+       as expressed in it, to build, train, evaluate or improve any product,
+       service, model or system;
+   (f) use the Software as training, fine-tuning or evaluation data for any
+       machine-learning or artificial-intelligence system;
+   (g) remove or change any copyright, license or attribution notice.
+
+4. No other rights
+
+   No license or right is granted by implication, estoppel or otherwise,
+   including under any patent, trademark, trade secret or copyright of
+   Harcorp. All rights not expressly granted are reserved by Harcorp. The
+   names "T2" and "Harcorp" and their logos are trademarks of Harcorp and may
+   not be used without written permission.
+
+5. Contributions
+
+   Harcorp does not accept outside contributions to this repository unless it
+   has agreed to them in writing. Anything submitted to Harcorp concerning the
+   Software may be used by Harcorp without any obligation to You.
+
+6. Termination
+
+   Any use that breaks this license ends Your permission to view the Software
+   immediately and without notice. You must then delete every copy in Your
+   possession or control. Harcorp may seek every remedy available by law.
+
+7. No warranty
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED, INCLUDING BUT NOT LIMITED TO WARRANTIES OF MERCHANTABILITY,
+   FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT.
+
+8. Limitation of liability
+
+   IN NO EVENT SHALL HARCORP BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+   LIABILITY, WHETHER IN CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+   IN CONNECTION WITH THE SOFTWARE OR ANY USE OF IT.
+
+9. Permission requests
+
+   Requests for any use beyond review go to Harcorp Industries through
+   https://harcorp.ai.

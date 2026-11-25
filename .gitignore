@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+dist/
+build/
+
+# Env and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Data and models (stored on Hugging Face / GitHub Releases)
+data_cache/
+/data/
+*.parquet
+*.pt
+*.pth
+*.onnx
+*.safetensors
+*.ckpt
+runs/
+
+# Node
+node_modules/
+.next/
+out/
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/

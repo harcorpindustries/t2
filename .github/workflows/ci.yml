@@ -1,0 +1,44 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Banned terms in files
+        run: python3 tools/term_guard.py files
+      - name: Banned terms in history
+        run: python3 tools/term_guard.py history
+      - name: Banned terms in PR title, body and branch
+        if: github.event_name == 'pull_request'
+        env:
+          PR_TEXT: |
+            ${{ github.event.pull_request.title }}
+            ${{ github.event.pull_request.body }}
+            ${{ github.head_ref }}
+        run: |
+          printf '%s' "$PR_TEXT" > "$RUNNER_TEMP/pr.txt"
+          python3 tools/term_guard.py msg "$RUNNER_TEMP/pr.txt"
+      - name: Secret scan
+        run: docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.21.2 git /repo --redact -v
+
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pyright
+      - run: uv run pytest -q
