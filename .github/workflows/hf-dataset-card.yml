@@ -1,0 +1,23 @@
+name: hf-dataset-card
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [hf/dataset_card.md]
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Upload dataset card
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          uvx --from huggingface_hub hf upload harcorp/t2-market-data hf/dataset_card.md README.md \
+            --repo-type dataset --commit-message "Update dataset card from ${GITHUB_SHA::7}"
