@@ -91,3 +91,10 @@ def test_errors_are_always_retried() -> None:
     d = date(2010, 5, 5)
     rows = [(d, "cm", "ok"), (d, "fo", "error"), (d, "mto", "ok")]
     assert days_needing_work(_ledger(rows), [d], date(2026, 11, 26)) == [d]
+
+
+def test_source_empty_is_final_once_settled() -> None:
+    today = date(2026, 11, 26)
+    old, recent = date(1995, 9, 6), date(2026, 11, 25)
+    assert days_needing_work(_ledger([(old, "cm", "source_empty")]), [old], today) == []
+    assert days_needing_work(_ledger([(recent, "cm", "source_empty")]), [recent], today) == [recent]

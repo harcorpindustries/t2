@@ -47,7 +47,7 @@ def candidate_urls(kind: str, d: date) -> list[tuple[str, str]]:
 
 @dataclass
 class Fetched:
-    status: str  # ok | not_published | error
+    status: str  # ok | not_published | source_empty | error
     http_status: int
     fmt: str = ""
     url: str = ""
@@ -58,6 +58,7 @@ class Fetched:
 def fetch(client: httpx.Client, kind: str, d: date, retries: int = 4) -> Fetched:
     """Try each candidate URL. 404 on all of them means NSE published nothing for that day."""
     attempts, last_status = 0, 0
+    empty: tuple[str, str] | None = None
     for fmt, url in candidate_urls(kind, d):
         for i in range(retries):
             attempts += 1
@@ -72,9 +73,14 @@ def fetch(client: httpx.Client, kind: str, d: date, retries: int = 4) -> Fetched
                 return Fetched("ok", 200, fmt, url, r.content, attempts)
             if r.status_code == 404:
                 break  # definitive for this URL; try the next format
+            if r.status_code == 200 and not r.content and i >= 1:
+                empty = (fmt, url)  # NSE serves a 0-byte file: a hole in the source archive
+                break
             time.sleep(2**i)  # 403/429/5xx or HTML error page: back off and retry
         else:
             return Fetched("error", last_status, fmt, url, attempts=attempts)
+    if empty:
+        return Fetched("source_empty", 200, empty[0], empty[1], attempts=attempts)
     return Fetched("not_published", 404, attempts=attempts)
 
 
