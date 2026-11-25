@@ -9,6 +9,7 @@ dependencies = [
     "pyarrow>=17.0",
     "httpx>=0.27",
     "pydantic>=2.8",
+    "breeze-connect>=1.0.69",
 ]
 
 [dependency-groups]
