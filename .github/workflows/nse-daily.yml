@@ -1,0 +1,36 @@
+name: nse-daily
+
+on:
+  schedule:
+    - cron: "0 14 * * *"   # 19:30 IST, after NSE publishes end-of-day files
+    - cron: "30 3 * * *"   # 09:00 IST, catches anything published late
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nse-daily
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen
+      - name: Collect last 10 days + retry every open gap this year
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: uv run python -m t2.data.collect_nse daily --lookback 10
+      - name: Audit for gaps
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: uv run python -m t2.data.collect_nse audit | tee audit.json
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nse-audit
+          path: audit.json
