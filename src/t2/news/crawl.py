@@ -183,13 +183,29 @@ def cmd_poll() -> None:
 def cmd_export() -> None:
     con = connect()
     stamp = now()
-    items = pl.read_database(
-        "SELECT id, source, category, url, title, summary, published_at, first_seen_at, text, text_status, tickers"
-        " FROM items WHERE exported_at IS NULL AND text_status != 'pending'",
-        con,
+    item_cols = "id, source, category, url, title, summary, published_at, first_seen_at, text, text_status, tickers"
+    item_rows = con.execute(
+        f"SELECT {item_cols} FROM items WHERE exported_at IS NULL AND text_status != 'pending'"
+    ).fetchall()
+    items = pl.DataFrame(
+        [tuple(r) for r in item_rows],
+        schema=dict.fromkeys(item_cols.replace(" ", "").split(","), pl.Utf8),
+        orient="row",
     )
-    polls = pl.read_database("SELECT rowid AS _rid, * FROM feed_polls WHERE exported_at IS NULL", con)
-    polls = polls.drop("exported_at")
+    poll_schema = {
+        "_rid": pl.Int64,
+        "source": pl.Utf8,
+        "polled_at": pl.Utf8,
+        "http_status": pl.Int64,
+        "items_seen": pl.Int64,
+        "items_new": pl.Int64,
+        "error": pl.Utf8,
+    }
+    poll_rows = con.execute(
+        "SELECT rowid, source, polled_at, http_status, items_seen, items_new, error"
+        " FROM feed_polls WHERE exported_at IS NULL"
+    ).fetchall()
+    polls = pl.DataFrame([tuple(r) for r in poll_rows], schema=poll_schema, orient="row")
     if items.is_empty() and polls.is_empty():
         print("export: nothing new")
         return
