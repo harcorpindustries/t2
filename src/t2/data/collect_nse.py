@@ -125,8 +125,7 @@ def days_needing_work(ledger: pl.DataFrame, candidates: list[date], today: date)
     done = {
         (r["date"], r["kind"])
         for r in ledger.iter_rows(named=True)
-        if r["status"] == "ok"
-        or (r["status"] in FINAL_IF_SETTLED and (today - r["date"]).days >= SETTLE_DAYS)
+        if r["status"] == "ok" or (r["status"] in FINAL_IF_SETTLED and (today - r["date"]).days >= SETTLE_DAYS)
     }
     return [d for d in candidates if any((d, k) not in done for k in KINDS if d >= FIRST_DATE[k])]
 
@@ -200,8 +199,7 @@ def audit() -> dict[str, object]:
         "missing_ledger_years": missing_years,
         "trading_days": int(wide.filter(pl.col("cm") == "ok").height),
         "status_counts": {
-            f"{r['kind']}:{r['status']}": r["len"]
-            for r in led.group_by("kind", "status").len().iter_rows(named=True)
+            f"{r['kind']}:{r['status']}": r["len"] for r in led.group_by("kind", "status").len().iter_rows(named=True)
         },
         "errors": [f"{r['kind']} {r['date']}" for r in errors.iter_rows(named=True)],
         "known_source_gaps": [f"{r['kind']} {r['date']}" for r in source_empty.iter_rows(named=True)],
@@ -210,8 +208,7 @@ def audit() -> dict[str, object]:
         "mto_missing_on_cm_days": [str(d) for d in mto_gap["date"].to_list()],
         "dataset_gb": round(hf_store.dataset_size_gb(), 3),
         "first_ok": {
-            k: str(led.filter((pl.col("kind") == k) & (pl.col("status") == "ok"))["date"].min())
-            for k in KINDS
+            k: str(led.filter((pl.col("kind") == k) & (pl.col("status") == "ok"))["date"].min()) for k in KINDS
         },
     }
     return report
