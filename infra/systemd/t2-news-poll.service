@@ -1,0 +1,14 @@
+[Unit]
+Description=t2 news crawler: poll feeds and extract articles
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/opt/t2/app
+EnvironmentFile=/opt/t2/.env
+Environment=T2_NEWS_DB=/opt/t2/data/news.db
+ExecStart=/usr/local/bin/uv run --frozen python -m t2.news.crawl poll
+TimeoutStartSec=280
+Nice=10

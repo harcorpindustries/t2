@@ -19,8 +19,7 @@ import polars as pl
 
 BASE = "https://nsearchives.nseindia.com"
 USER_AGENT = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/131.0 Safari/537.36"
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36"
 )
 KINDS = ("cm", "fo", "mto")
 FIRST_DATE = {"cm": date(1994, 11, 1), "fo": date(2000, 6, 1), "mto": date(1995, 1, 1)}
@@ -179,10 +178,7 @@ def parse_fo(raw: bytes, fmt: str, d: date) -> pl.DataFrame:
         cols = [
             _col(df, "INSTRUMENT").alias("instrument"),
             _col(df, "SYMBOL").alias("symbol"),
-            _col(df, "EXPIRY_DT")
-            .str.to_titlecase()
-            .str.strptime(pl.Date, "%d-%b-%Y", strict=False)
-            .alias("expiry"),
+            _col(df, "EXPIRY_DT").str.to_titlecase().str.strptime(pl.Date, "%d-%b-%Y", strict=False).alias("expiry"),
             _col(df, "STRIKE_PR", f).alias("strike"),
             _col(df, "OPTION_TYP").replace("XX", None).alias("option_type"),
             _col(df, "OPEN", f).alias("open"),
@@ -201,10 +197,7 @@ def parse_fo(raw: bytes, fmt: str, d: date) -> pl.DataFrame:
     out = df.select(cols).filter(pl.col("symbol").is_not_null())
     # Futures have no strike: legacy files say 0, UDiFF leaves it empty. Normalize to null.
     out = out.with_columns(
-        pl.when(pl.col("instrument").str.starts_with("FUT"))
-        .then(None)
-        .otherwise(pl.col("strike"))
-        .alias("strike")
+        pl.when(pl.col("instrument").str.starts_with("FUT")).then(None).otherwise(pl.col("strike")).alias("strike")
     )
     return out.with_columns(pl.lit(d).alias("date"), pl.lit(fmt).alias("source_format")).select(
         "date", *[c for c in out.columns], "source_format"

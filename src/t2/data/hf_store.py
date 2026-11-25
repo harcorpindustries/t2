@@ -36,9 +36,7 @@ def upload_folder(folder: Path, message: str, retries: int = 5) -> None:
     """Commit everything under `folder` (laid out like the repo) in one commit, with retries."""
     for i in range(retries):
         try:
-            api().upload_folder(
-                repo_id=DATASET_REPO, repo_type="dataset", folder_path=folder, commit_message=message
-            )
+            api().upload_folder(repo_id=DATASET_REPO, repo_type="dataset", folder_path=folder, commit_message=message)
             return
         except Exception:
             if i == retries - 1:
