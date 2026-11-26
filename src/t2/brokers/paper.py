@@ -38,6 +38,7 @@ class PaperBroker:
     starting_cash: float
     plan: BrokeragePlan = DEFAULT_PLAN
     participation: float = 0.1
+    slippage_bps: float = 0.0  # adverse move on aggressive fills (at the open, square-off); never past a limit
     max_orders_per_sec: int = 10
     margin: dict[str, float] = field(default_factory=lambda: dict(DEFAULT_MARGIN))
     _cash: float = field(init=False)
@@ -100,7 +101,7 @@ class PaperBroker:
                 break
             if o.contract.key != contract_key or o.created >= bar.ts:
                 continue
-            price = _fill_price(o, bar)
+            price = _fill_price(o, bar, self.slippage_bps / 1e4)
             if price is None:
                 continue
             qty = min(o.remaining, left)
@@ -140,6 +141,7 @@ class PaperBroker:
                 continue
             side = Side.SELL if p.qty > 0 else Side.BUY
             px = self._last.get(p.contract.key, p.avg_price)
+            px *= 1 + self.slippage_bps / 1e4 if side == Side.BUY else 1 - self.slippage_bps / 1e4
             o = Order(p.contract, side, abs(p.qty), px, p.product, ts, tag="square_off")
             o.id = f"P{next(self._ids):08d}"
             self._orders[o.id] = o
@@ -234,12 +236,12 @@ def _opening_side(qty: int) -> Side:
     return Side.BUY if qty > 0 else Side.SELL
 
 
-def _fill_price(o: Order, bar: Bar) -> float | None:
+def _fill_price(o: Order, bar: Bar, slip: float = 0.0) -> float | None:
     tick = o.contract.tick
     if o.side == Side.BUY:
         if bar.open <= o.limit:
-            return bar.open
+            return min(bar.open * (1 + slip), o.limit)
         return o.limit if bar.low <= o.limit - tick else None
     if bar.open >= o.limit:
-        return bar.open
+        return max(bar.open * (1 - slip), o.limit)
     return o.limit if bar.high >= o.limit + tick else None

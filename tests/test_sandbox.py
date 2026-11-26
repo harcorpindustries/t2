@@ -120,3 +120,13 @@ def test_option_buy_paid_in_full_and_sold():
 
 def _ch(side: Side, qty: int, price: float) -> float:
     return charges(Kind.EQ, Product.INTRADAY, side, qty, price, T0.date(), FREE).total
+
+
+def test_slippage_is_adverse_but_never_past_the_limit():
+    b = PaperBroker(1_000_000, plan=FREE, slippage_bps=10)
+    o = b.place(order(limit=100.0))
+    b.on_bar(EQ.key, bar(1, 99.0, 99, 98, 99))
+    assert o.avg_price == pytest.approx(99.0 * 1.001)
+    o2 = b.place(order(limit=100.0, at=2))
+    b.on_bar(EQ.key, bar(3, 99.95, 100, 99, 99))
+    assert o2.avg_price == 100.0  # capped at the limit
