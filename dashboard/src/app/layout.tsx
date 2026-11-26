@@ -16,7 +16,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Themes>
         <div className="md:flex">
           <aside className="flex flex-col bg-sidebar p-4 shadow-[2px_0_12px_-4px_rgba(0,0,0,0.12)] md:sticky md:top-0 md:h-screen md:w-64 md:shrink-0 md:p-6">
-            <div className="mb-6 hidden px-4 text-lg font-semibold text-brand md:block">T2</div>
+            <div className="mb-6 hidden items-center gap-3 px-4 md:flex">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/mascot.png" alt="T2 mascot" width={36} height={36} className="size-9" />
+              <span className="text-lg font-semibold text-brand">T2</span>
+            </div>
             <Nav />
             <div className="mt-4 space-y-1 md:mt-auto">
               <ThemeToggle />
