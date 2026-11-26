@@ -34,4 +34,6 @@ def test_buffer_cuts_trading():
 
 def test_book_never_holds_more_than_k_per_side():
     daily = run_book(frame(oracle=1.0), HoldConfig(k=4, exit_k=20))
-    assert daily["trades"].max() <= 4 * 4  # at most full turnover: 4 exits + 4 entries per side
+    assert (
+        daily["trades"].to_list() and max(daily["trades"].to_list()) <= 4 * 4
+    )  # at most full turnover: 4 exits + 4 entries per side
