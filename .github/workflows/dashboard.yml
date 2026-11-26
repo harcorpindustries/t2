@@ -1,0 +1,51 @@
+name: dashboard
+
+on:
+  push:
+    branches: [main]
+    paths: ["dashboard/**", ".github/workflows/dashboard.yml"]
+  pull_request:
+    paths: ["dashboard/**", ".github/workflows/dashboard.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: dashboard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npm run build
+      - run: tar -czf ../dashboard.tar.gz -C out .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dashboard
+          path: dashboard.tar.gz
+
+  publish:
+    # The server downloads the latest build from this release asset (public repo: no credentials on the server).
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dashboard
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view dashboard -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create dashboard -R "$GITHUB_REPOSITORY" --title "Dashboard build" \
+              --notes "Latest static dashboard build from main (served by the live server)." --latest=false
+          gh release upload dashboard dashboard.tar.gz -R "$GITHUB_REPOSITORY" --clobber
