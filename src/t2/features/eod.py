@@ -48,6 +48,7 @@ FEATURES = [
     *[f"{c}_rk" for c in RANKED],
 ]
 TARGETS = ["y1", "y5"]
+NEXT = ["next_gap", "next_lr"]  # y1 is the next open-to-close; with these, any holding pattern can be scored
 
 
 def fetch(dest: Path, fno: bool = False, offline: bool = False) -> Path:
@@ -140,6 +141,13 @@ def build(raw: pl.DataFrame) -> pl.DataFrame:
         pl.when(pl.col("di").shift(-5).over(s) == pl.col("di") + 5)
         .then(pl.col("L").shift(-5).over(s) - pl.col("L") - pl.col("gap").shift(-1).over(s))
         .alias("y5"),
+        # next session's pieces, for scoring portfolios that hold across days (never model inputs)
+        *[
+            pl.when(pl.col("di").shift(-1).over(s) == pl.col("di") + 1)
+            .then(pl.col(c).shift(-1).over(s))
+            .alias(f"next_{c}")
+            for c in ("gap", "lr")
+        ],
     )
     df = df.with_columns(
         (
@@ -169,4 +177,4 @@ def build(raw: pl.DataFrame) -> pl.DataFrame:
     ranks = uni.select(
         "date", "symbol", *[(pl.col(c).rank() / pl.col(c).count()).over("date").alias(f"{c}_rk") for c in RANKED]
     )
-    return uni.join(ranks, on=["date", "symbol"]).select("date", "symbol", "close", "liq", *FEATURES, *TARGETS)
+    return uni.join(ranks, on=["date", "symbol"]).select("date", "symbol", "close", "liq", *FEATURES, *TARGETS, *NEXT)
