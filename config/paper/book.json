@@ -1,0 +1,20 @@
+{
+  "capital": 3000000,
+  "k": 10,
+  "exit_k": 50,
+  "notional_per_position": 500000,
+  "slippage_bps": 5,
+  "roll_days": 2,
+  "risk": {
+    "capital": 12000000,
+    "max_order_value": 1500000,
+    "max_position_value": 1500000,
+    "max_open_positions": 22,
+    "max_daily_loss": 200000,
+    "max_orders_per_sec": 5,
+    "max_orders_per_day": 100,
+    "max_price_deviation": 0.05,
+    "allow_kinds": ["fut"],
+    "allow_products": ["carry"]
+  }
+}

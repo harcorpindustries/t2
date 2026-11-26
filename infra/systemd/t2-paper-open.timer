@@ -1,0 +1,11 @@
+[Unit]
+Description=t2 paper trader open (09:20 IST, retried in case the daily Breeze login is late; trades once a day)
+
+[Timer]
+OnCalendar=Mon..Fri 09:20
+OnCalendar=Mon..Fri 09:40
+OnCalendar=Mon..Fri 10:15
+Persistent=false
+
+[Install]
+WantedBy=timers.target
