@@ -1,0 +1,12 @@
+[Unit]
+Description=t2 paper trader: open (simulated fills on live prices, never places orders)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/opt/t2/app
+EnvironmentFile=/opt/t2/.env
+Environment=T2_PAPER_DIR=/opt/t2/data
+ExecStart=/usr/local/bin/uv run --frozen python -m t2.trader.paper_live open

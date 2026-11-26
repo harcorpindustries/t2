@@ -1,0 +1,9 @@
+[Unit]
+Description=t2 paper trader close (15:35 IST: mark to market, record the day, export)
+
+[Timer]
+OnCalendar=Mon..Fri 15:35
+Persistent=false
+
+[Install]
+WantedBy=timers.target
