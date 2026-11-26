@@ -82,7 +82,7 @@ def build(raw: pl.DataFrame) -> pl.DataFrame:
     df = raw.filter(good).sort("symbol", "date")
 
     cal = df.select(pl.col("date").unique().sort()).with_row_index("di")
-    df = df.join(cal, on="date")
+    df = df.join(cal, on="date").sort("symbol", "date")  # rolling/shift below need this order
 
     lr = (pl.col("close") / pl.col("prev_close")).log()
     df = df.with_columns(

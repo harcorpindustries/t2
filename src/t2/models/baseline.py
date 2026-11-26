@@ -75,8 +75,9 @@ def evaluate(pred: pl.DataFrame, cfg: Config) -> dict[str, float]:
     ic = (
         pred.group_by("date")
         .agg(pl.corr(pl.col("score").rank(), pl.col(t).rank()).alias("ic"))
-        .drop_nulls()
         .get_column("ic")
+        .fill_nan(None)
+        .drop_nulls()
     )
     ranked = pred.with_columns(
         pl.col("score").rank("ordinal", descending=True).over("date").alias("top"),
