@@ -279,9 +279,10 @@ export function HBars({ items, format, height = 28 }: { items: { name: string; v
   return (
     <div className="w-full" style={{ height: items.length * height + 16 }}>
       <ResponsiveContainer>
-        <BarChart data={items} layout="vertical" margin={{ left: 0, right: 40, top: 0, bottom: 0 }} barCategoryGap={4}>
+        <BarChart data={items} layout="vertical" margin={{ left: 0, right: 44, top: 0, bottom: 0 }} barCategoryGap={4} maxBarSize={18}>
           <XAxis type="number" hide />
-          <YAxis type="category" dataKey="name" {...axis} width={120} interval={0} />
+          <YAxis type="category" dataKey="name" {...axis} fontSize={11} width={150} interval={0}
+            tickFormatter={(v: string) => (v.length > 24 ? `${v.slice(0, 23)}…` : v)} />
           <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "var(--muted)", opacity: 0.4 }} formatter={(v) => [format ? format(Number(v)) : String(v), ""]} />
           <Bar dataKey="value" fill="var(--brand)" radius={[0, 3, 3, 0]}
             label={{ position: "right", fontSize: 11, fill: "var(--muted-foreground)", formatter: (v: unknown) => (format ? format(Number(v)) : String(v)) }} />
@@ -297,10 +298,11 @@ export function SignedBars({ points, format, name }: { points: { x: string; y: n
   return (
     <div className="h-48 w-full">
       <ResponsiveContainer>
-        <BarChart data={points} margin={{ left: 4, right: 12, top: 8, bottom: 0 }} barCategoryGap={2}>
+        <BarChart data={points} margin={{ left: 4, right: 12, top: 8, bottom: 0 }} barCategoryGap={2} maxBarSize={40}>
           <CartesianGrid vertical={false} stroke="var(--border)" />
           <XAxis dataKey="x" {...axis} minTickGap={32} />
-          <YAxis {...axis} width={48} tickFormatter={format} />
+          <YAxis {...axis} width={52} tickFormatter={format}
+            domain={[(lo: number) => Math.min(lo, -0.1), (hi: number) => Math.max(hi, 0.1)]} />
           <ReferenceLine y={0} stroke="var(--muted-foreground)" strokeOpacity={0.5} />
           <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "var(--muted)", opacity: 0.4 }} formatter={(v, _n, item) => [format(Number(v)) + ((item?.payload as { dim?: boolean })?.dim ? " (window not complete)" : ""), name]} />
           <Bar dataKey="y" radius={[2, 2, 0, 0]}>
@@ -323,10 +325,11 @@ export function PicksVsMarket({ points }: { points: { x: string; picks: number; 
       </div>
       <div className="h-48 w-full">
         <ResponsiveContainer>
-          <BarChart data={points} margin={{ left: 4, right: 12, top: 8, bottom: 0 }} barGap={2} barCategoryGap={6}>
+          <BarChart data={points} margin={{ left: 4, right: 12, top: 8, bottom: 0 }} barGap={2} barCategoryGap={6} maxBarSize={32}>
             <CartesianGrid vertical={false} stroke="var(--border)" />
             <XAxis dataKey="x" {...axis} minTickGap={32} />
-            <YAxis {...axis} width={48} tickFormatter={(v: number) => pct(v, 0)} />
+            <YAxis {...axis} width={52} tickFormatter={(v: number) => pct(v, 1)}
+              domain={[(lo: number) => Math.min(lo, -0.01), (hi: number) => Math.max(hi, 0.01)]} />
             <ReferenceLine y={0} stroke="var(--muted-foreground)" strokeOpacity={0.5} />
             <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "var(--muted)", opacity: 0.4 }} formatter={(v, n) => [pct(Number(v)), String(n)]} />
             <Bar name="Top picks" dataKey="picks" fill="var(--brand)" radius={[2, 2, 0, 0]} />
@@ -350,7 +353,7 @@ export function ToneBars({ days }: { days: { day: string; pos: number; neg: numb
       </div>
       <div className="h-40 w-full">
         <ResponsiveContainer>
-          <BarChart data={days} margin={{ left: 4, right: 12, top: 4, bottom: 0 }} barCategoryGap={2}>
+          <BarChart data={days} margin={{ left: 4, right: 12, top: 4, bottom: 0 }} barCategoryGap={2} maxBarSize={28}>
             <XAxis dataKey="day" {...axis} minTickGap={32} />
             <YAxis {...axis} width={36} allowDecimals={false} />
             <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "var(--muted)", opacity: 0.4 }} />

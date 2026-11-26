@@ -99,7 +99,7 @@ export function Shell({ children }: { children: ReactNode }) {
           <div className="min-w-0 flex-1">
             <TopBar onMenu={() => setMobileOpen(true)} onSearch={() => setPalette(true)} paused={paused}
               onPause={togglePause} onRefresh={() => setTick((t) => t + 1)} lastUpdated={lastUpdated} />
-            <main className="mx-auto max-w-[1600px] p-4 sm:p-6 lg:p-8">{children}</main>
+            <main className="mx-auto max-w-[1600px] px-4 pb-10 pt-6 sm:px-6 lg:px-8">{children}</main>
           </div>
         </div>
         <Palette open={palette} onClose={() => setPalette(false)} onToggleSidebar={toggleSidebar} />
@@ -135,17 +135,18 @@ function TopBar({ onMenu, onSearch, paused, onPause, onRefresh, lastUpdated }: {
   const m = now ? marketStatus(now) : null;
   const ago = now && lastUpdated ? Math.max(0, Math.round((now.getTime() - lastUpdated) / 1000)) : null;
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-2 bg-background/85 px-3 backdrop-blur sm:px-6 lg:px-8">
-      <button type="button" onClick={onMenu} aria-label="Open menu" className="rounded-md p-2 hover:bg-muted md:hidden">
+    <header className="sticky top-0 z-30 border-b border-border bg-background/85 backdrop-blur">
+      <div className="mx-auto flex h-14 max-w-[1600px] items-center gap-2 px-4 sm:px-6 lg:px-8">
+      <button type="button" onClick={onMenu} aria-label="Open menu" className="-ml-2 rounded-md p-2 hover:bg-muted md:hidden">
         <Menu className="size-5" />
       </button>
       <button type="button" onClick={onSearch}
-        className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-md bg-muted/70 px-3 text-sm text-muted-foreground hover:bg-muted sm:max-w-xs">
+        className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-md bg-muted/60 px-3 text-sm text-muted-foreground ring-1 ring-border hover:bg-muted sm:max-w-xs">
         <Search className="size-4 shrink-0" />
         <span className="truncate">Search stocks, pages…</span>
         <kbd className="ml-auto hidden rounded bg-background px-1.5 py-0.5 font-mono text-[11px] sm:inline">⌘K</kbd>
       </button>
-      <div className="ml-auto flex items-center gap-1.5">
+      <div className="ml-auto flex items-center gap-1">
         {m && (
           <Pill title={`${m.label}; ${m.next} in ${duration(m.inMs)} (IST, weekdays; exchange holidays not shown)`}
             className={m.state === "open" ? "bg-good/15 text-good" : m.state === "pre-open" ? "bg-warn/15 text-warn" : "bg-muted text-muted-foreground"}>
@@ -176,6 +177,7 @@ function TopBar({ onMenu, onSearch, paused, onPause, onRefresh, lastUpdated }: {
           className={cn("rounded-md p-2 hover:bg-muted", paused ? "text-warn" : "text-muted-foreground hover:text-foreground")}>
           {paused ? <Play className="size-4" /> : <Pause className="size-4" />}
         </button>
+      </div>
       </div>
     </header>
   );

@@ -8,10 +8,10 @@ export function Card({ title, action, children, className }: {
   title?: ReactNode; action?: ReactNode; children: ReactNode; className?: string;
 }) {
   return (
-    <section className={cn("min-w-0 rounded-xl bg-card p-5 text-card-foreground ring-1 ring-foreground/10 sm:p-6", className)}>
+    <section className={cn("min-w-0 rounded-xl bg-card p-5 text-card-foreground ring-1 ring-foreground/10", className)}>
       {(title || action) && (
-        <header className="mb-4 flex min-h-11 items-center justify-between gap-4">
-          {title && <h2 className="text-base font-semibold sm:text-lg">{title}</h2>}
+        <header className="mb-4 flex min-h-9 flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          {title && <h2 className="text-base font-semibold">{title}</h2>}
           {action}
         </header>
       )}
@@ -34,7 +34,7 @@ export function Stat({ label, value, tone, sub }: { label: string; value: ReactN
   return (
     <div className="min-w-32">
       <div className="text-xs font-medium text-muted-foreground">{label}</div>
-      <div className={cn("mt-1 text-2xl font-semibold tabular-nums",
+      <div className={cn("mt-1 text-2xl font-semibold leading-tight tabular-nums",
         tone === "pos" && "text-up", tone === "neg" && "text-down")}>{value}</div>
       {sub && <div className="mt-0.5 text-xs text-muted-foreground">{sub}</div>}
     </div>
@@ -51,7 +51,7 @@ export type BadgeKind = "muted" | "danger" | "ok" | "up" | "down" | "brand" | "w
 /** Colored chips. Status kinds (ok/danger/warn) should carry an icon or a word, never color alone. */
 export function Badge({ children, kind = "muted" }: { children: ReactNode; kind?: BadgeKind }) {
   return (
-    <span className={cn("inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-xs font-medium",
+    <span className={cn("inline-flex h-6 items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 text-xs font-medium",
       kind === "muted" && "bg-muted text-muted-foreground",
       kind === "danger" && "bg-down/15 text-down",
       kind === "ok" && "bg-good/15 text-good",
@@ -68,7 +68,7 @@ export function Button({ children, onClick, variant = "primary", disabled, type 
 }) {
   return (
     <button type={type} onClick={onClick} disabled={disabled}
-      className={cn("inline-flex h-11 items-center justify-center gap-2 rounded-md px-5 text-sm font-medium",
+      className={cn("inline-flex h-10 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md px-4 text-sm font-medium",
         "transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
         "disabled:pointer-events-none disabled:opacity-50",
         variant === "primary" && "bg-brand text-brand-foreground hover:bg-brand/80",
@@ -82,8 +82,14 @@ export function Button({ children, onClick, variant = "primary", disabled, type 
 
 export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props}
-    className={cn("h-11 rounded-md border border-input bg-transparent px-4 text-base outline-none",
+    className={cn("h-10 min-w-0 rounded-md border border-input bg-transparent px-3 text-sm outline-none placeholder:text-muted-foreground",
       "focus:border-ring focus:ring-[3px] focus:ring-ring/50", props.className)} />;
+}
+
+/** A cell that reads as a figure (₹, %, counts) is right-aligned so digits line up; text stays left. */
+const NUMERIC = /^[+−-]?₹?[\d,.]+(\s?(%|K|L|Cr|sh|GB|MB))?$/;
+function isNumeric(v: ReactNode): boolean {
+  return typeof v === "number" || (typeof v === "string" && v !== "–" && NUMERIC.test(v));
 }
 
 /** Rows separated by a tint on hover, not by lines. */
@@ -91,18 +97,22 @@ export function Table({ head, rows, empty = "Nothing yet" }: {
   head: ReactNode[]; rows: ReactNode[][]; empty?: string;
 }) {
   if (!rows.length) return <p className="py-6 text-sm text-muted-foreground">{empty}</p>;
+  const right = head.map((_, j) => {
+    const vals = rows.map((r) => r[j]).filter((v) => v != null && v !== "" && v !== "–");
+    return vals.length > 0 && vals.every(isNumeric);
+  });
   return (
     <div className="-mx-2 overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
           <tr className="text-left text-xs font-medium text-muted-foreground">
-            {head.map((h, i) => <th key={i} className="px-2 pb-2 font-medium">{h}</th>)}
+            {head.map((h, i) => <th key={i} className={cn("whitespace-nowrap px-2 pb-2 font-medium", right[i] && "text-right")}>{h}</th>)}
           </tr>
         </thead>
         <tbody>
           {rows.map((r, i) => (
-            <tr key={i} className="rounded-lg hover:bg-muted/60">
-              {r.map((c, j) => <td key={j} className="whitespace-nowrap px-2 py-2.5 tabular-nums first:rounded-l-lg last:rounded-r-lg">{c}</td>)}
+            <tr key={i} className="hover:bg-muted/60">
+              {r.map((c, j) => <td key={j} className={cn("whitespace-nowrap px-2 py-2.5 align-middle tabular-nums first:rounded-l-md last:rounded-r-md", right[j] && "text-right")}>{c}</td>)}
             </tr>
           ))}
         </tbody>
@@ -147,14 +157,14 @@ export function Tile({ label, value, tone, note, children, loading }: {
   label: string; value: ReactNode; tone?: "pos" | "neg"; note?: ReactNode; children?: ReactNode; loading?: boolean;
 }) {
   return (
-    <div className="flex min-w-0 flex-col rounded-xl bg-card p-4 ring-1 ring-foreground/10">
+    <div className="flex min-w-0 flex-col rounded-xl bg-card px-4 py-3.5 ring-1 ring-foreground/10">
       <div className="text-xs font-medium text-muted-foreground">{label}</div>
       {loading ? <Skeleton className="mt-2 h-7 w-24" /> : (
         <div className={cn("mt-1 truncate text-xl font-semibold tabular-nums sm:text-2xl",
           tone === "pos" && "text-up", tone === "neg" && "text-down")}>{value}</div>
       )}
       {note && <div className="mt-0.5 truncate text-xs text-muted-foreground">{note}</div>}
-      {children && <div className="mt-2 h-8">{children}</div>}
+      {children && <div className="mt-auto h-8 pt-2">{children}</div>}
     </div>
   );
 }
@@ -167,7 +177,7 @@ export function Meter({ label, value, limit, format }: {
   const level = frac >= 0.9 ? "danger" : frac >= 0.7 ? "warn" : "ok";
   return (
     <div>
-      <div className="mb-1.5 flex items-baseline justify-between gap-3 text-sm">
+      <div className="mb-2 flex items-baseline justify-between gap-3 text-sm">
         <span className="font-medium">{label}</span>
         <span className="tabular-nums text-muted-foreground">
           {format(value)} <span className="opacity-70">of {limit != null ? format(limit) : "–"}</span>
@@ -190,7 +200,7 @@ export function Chips<T extends string>({ value, options, onChange }: {
     <div className="flex flex-wrap gap-1.5">
       {options.map((o) => (
         <button key={o.key} type="button" onClick={() => onChange(o.key)}
-          className={cn("h-9 rounded-md px-3.5 text-sm font-medium transition-colors",
+          className={cn("h-8 rounded-md px-3 text-sm font-medium transition-colors",
             value === o.key ? "bg-brand/15 text-brand" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>
           {o.label}
         </button>

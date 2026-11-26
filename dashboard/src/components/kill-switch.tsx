@@ -41,8 +41,8 @@ export function KillSwitch({ kill, onChange }: { kill: Kill | undefined; onChang
           : <Badge kind="ok"><CheckCircle2 className="size-3.5" />Trading allowed</Badge>}
         {on && <span className="text-sm text-muted-foreground">since {when(kill?.since)} · {kill?.reason}</span>}
       </div>
-      <div className="flex flex-wrap gap-3">
-        {!on && <Input placeholder="Reason (optional)" value={reason} onChange={(e) => setReason(e.target.value)} />}
+      <div className="flex flex-wrap items-center gap-2">
+        {!on && <Input placeholder="Reason (optional)" value={reason} onChange={(e) => setReason(e.target.value)} className="flex-1 basis-40" />}
         {on ? (
           <Button variant="outline" onClick={() => setAsking("off")} disabled={busy}>Release</Button>
         ) : (

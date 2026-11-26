@@ -49,14 +49,14 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onClose }: {
       <aside
         className={cn(
           "z-50 flex flex-col bg-sidebar shadow-[2px_0_12px_-4px_rgba(0,0,0,0.12)] transition-[width] duration-200",
-          "fixed inset-y-0 left-0 w-64 p-4 md:sticky md:top-0 md:h-screen md:shrink-0",
+          "fixed inset-y-0 left-0 w-64 border-r border-border px-3 pb-3 md:sticky md:top-0 md:h-screen md:shrink-0",
           mobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
-          rail ? "md:w-16 md:px-2 md:py-4" : "md:w-64 md:p-5",
+          rail ? "md:w-16 md:px-2" : "md:w-60",
         )}
       >
-        <div className={cn("mb-6 flex items-center gap-3", rail ? "justify-center" : "px-3")}>
+        <div className={cn("mb-3 flex h-14 shrink-0 items-center gap-2.5 border-b border-border", rail ? "-mx-2 justify-center" : "-mx-3 px-5")}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/mascot.png" alt="T2 mascot" width={36} height={36} className="size-9 shrink-0" />
+          <img src="/mascot.png" alt="T2 mascot" width={32} height={32} className="size-8 shrink-0" />
           {!rail && <span className="text-lg font-semibold text-brand">T2</span>}
         </div>
         <nav className="flex flex-col gap-1">
@@ -64,7 +64,7 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onClose }: {
             const active = href === "/" ? path === "/" : path.startsWith(href);
             return (
               <Link key={href} href={href} aria-label={label}
-                className={cn("group relative flex h-11 items-center gap-3 rounded-md text-sm font-medium transition-colors",
+                className={cn("group relative flex h-10 items-center gap-3 rounded-md text-sm font-medium transition-colors",
                   rail ? "justify-center px-0" : "px-3",
                   active ? "bg-brand/15 text-brand" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>
                 <Icon className="size-[18px] shrink-0" />
@@ -74,12 +74,12 @@ export function Sidebar({ collapsed, onToggle, mobileOpen, onClose }: {
             );
           })}
         </nav>
-        <div className="mt-auto space-y-1 pt-4">
+        <div className="mt-auto space-y-1 border-t border-border pt-3">
           <ThemeToggle compact={rail} />
-          {!rail && <p className="px-3 py-2 text-xs text-muted-foreground">Paper trading only. Not financial advice.</p>}
+          {!rail && <p className="px-3 py-1.5 text-xs leading-5 text-muted-foreground">Paper trading only. Not financial advice.</p>}
           <SignOut compact={rail} />
           <button type="button" onClick={onToggle} aria-label={rail ? "Expand sidebar" : "Collapse sidebar"}
-            className={cn("group relative hidden h-11 w-full items-center gap-3 rounded-md text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground md:flex",
+            className={cn("group relative hidden h-10 w-full items-center gap-3 rounded-md text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground md:flex",
               rail ? "justify-center" : "px-3")}>
             {rail ? <PanelLeftOpen className="size-[18px]" /> : <PanelLeftClose className="size-[18px]" />}
             {!rail && <span className="flex-1 text-left">Collapse</span>}
@@ -108,7 +108,7 @@ export function SignOut({ compact }: { compact?: boolean }) {
   return (
     <>
       <button type="button" onClick={() => setAsking(true)} aria-label="Sign out"
-        className={cn("group relative flex h-11 w-full items-center gap-3 rounded-md text-sm font-medium text-down hover:bg-down/15",
+        className={cn("group relative flex h-10 w-full items-center gap-3 rounded-md text-sm font-medium text-down hover:bg-down/15",
           compact ? "justify-center" : "px-3")}>
         <LogOut className="size-[18px] shrink-0" />
         {!compact && "Sign out"}

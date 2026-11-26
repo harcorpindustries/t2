@@ -88,10 +88,10 @@ export default function Overview() {
         Overview
       </PageTitle>
       <ErrorNote error={error} onRetry={reload} />
-      <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
+      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-7">
         <Tile label="Equity" value={compactRupees(data?.equity ?? data?.capital)} loading={loading}
           note={data?.capital ? `started ${compactRupees(data.capital)}` : undefined}>
-          <Sparkline values={eqSeries} />
+          {eqSeries.length > 2 ? <Sparkline values={eqSeries} /> : null}
         </Tile>
         <Tile label="Today" value={signedRupees(data?.day_pnl)} tone={tone(data?.day_pnl)} loading={loading}
           note={data?.day_pnl != null && data.capital ? pct(data.day_pnl / data.capital) : "no session yet"} />
@@ -110,7 +110,7 @@ export default function Overview() {
       <div className="grid gap-5 xl:grid-cols-3">
         <Card title="Equity vs the market" className="xl:col-span-2">
           <EquityVsBench points={bench?.points ?? []} />
-          <h3 className="mb-2 mt-6 text-sm font-medium text-muted-foreground">Drawdown (fall from the best equity so far)</h3>
+          <h3 className="mb-2 mt-6 border-t border-border pt-5 text-sm font-medium text-muted-foreground">Drawdown (fall from the best equity so far)</h3>
           <DrawdownChart points={data?.drawdown ?? []} />
         </Card>
         <div className="grid content-start gap-5">
@@ -148,7 +148,9 @@ export default function Overview() {
             <ul className="space-y-2.5 text-sm">
               {data.events.slice(0, 7).map((e, i) => (
                 <li key={i} className="flex gap-3">
-                  <span className="w-28 shrink-0 text-xs tabular-nums text-muted-foreground">{when(e.ts)}</span>
+                  <span className="w-24 shrink-0 whitespace-nowrap pt-px text-xs tabular-nums text-muted-foreground">
+                    {new Date(e.ts).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false })}
+                  </span>
                   <span className="min-w-0"><span className="font-medium">{e.kind.replace(/_/g, " ")}</span>
                     <span className="text-muted-foreground"> · {e.detail}</span></span>
                 </li>
