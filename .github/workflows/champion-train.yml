@@ -15,6 +15,10 @@ concurrency:
 jobs:
   train:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        book: [futures, cash]
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
@@ -23,4 +27,4 @@ jobs:
       - name: Train the champion recipe on the latest data and publish it
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: uv run python -m t2.models.champion train
+        run: uv run python -m t2.models.champion train --book ${{ matrix.book }}

@@ -65,7 +65,7 @@ def test_plan_rolls_near_expiry():
 
 def test_open_and_close_day(tmp_path, monkeypatch):
     monkeypatch.setattr(pl_live, "DATA", tmp_path)
-    monkeypatch.setattr(pl_live, "latest_signals", lambda today: signals(list("ABCDEFGH")))
+    monkeypatch.setattr(pl_live, "latest_signals", lambda today, folder="signals": signals(list("ABCDEFGH")))
     monkeypatch.setattr(pl_live, "export", lambda con: None)
     con = connect(tmp_path / "paper.db")
     c = cfg()
@@ -83,7 +83,7 @@ def test_open_and_close_day(tmp_path, monkeypatch):
 
 def test_kill_file_blocks_new_positions(tmp_path, monkeypatch):
     monkeypatch.setattr(pl_live, "DATA", tmp_path)
-    monkeypatch.setattr(pl_live, "latest_signals", lambda today: signals(list("ABCDEFGH")))
+    monkeypatch.setattr(pl_live, "latest_signals", lambda today, folder="signals": signals(list("ABCDEFGH")))
     (tmp_path / "KILL").touch()
     r = run_open(connect(tmp_path / "paper.db"), cfg(), quotes({}), NOW)
     assert r["filled"] == 0 and r["blocked"] == 4
@@ -91,16 +91,20 @@ def test_kill_file_blocks_new_positions(tmp_path, monkeypatch):
 
 def test_holiday_and_stale_signals_skip(tmp_path, monkeypatch):
     monkeypatch.setattr(pl_live, "DATA", tmp_path)
-    monkeypatch.setattr(pl_live, "latest_signals", lambda today: signals(list("ABCDEFGH")))
+    monkeypatch.setattr(pl_live, "latest_signals", lambda today, folder="signals": signals(list("ABCDEFGH")))
     con = connect(tmp_path / "paper.db")
     assert "market closed" in run_open(con, cfg(), quotes({}, when=datetime(2026, 11, 30, 15, 29)), NOW)["skipped"]
-    monkeypatch.setattr(pl_live, "latest_signals", lambda today: signals(list("ABCDEFGH"), d=date(2026, 11, 20)))
+    monkeypatch.setattr(
+        pl_live, "latest_signals", lambda today, folder="signals": signals(list("ABCDEFGH"), d=date(2026, 11, 20))
+    )
     assert "stale" in run_open(con, cfg(), quotes({}), NOW)["skipped"]
 
 
 def test_config_file_loads():
-    c = BookConfig.load()
-    assert c.k == 10 and c.exit_k == 50 and c.risk.allow_kinds == ("fut",)
+    c = BookConfig.load()  # the Rs 50,000 paper account: long-only cash book following the cash champion
+    assert c.capital == 50_000 and c.vehicle == "delivery" and c.long_only and c.signals == "signals-cash"
+    assert c.risk.allow_kinds == ("eq",) and c.risk.allow_products == ("delivery",)
+    assert c.k * c.notional_per_position <= c.capital
 
 
 def delivery_cfg() -> BookConfig:
@@ -132,7 +136,9 @@ def test_delivery_book_pays_cash_and_marks_shares(tmp_path, monkeypatch):
     monkeypatch.setattr(
         pl_live,
         "latest_signals",
-        lambda today: signals(list("ABCDEFGH")).with_columns(pl.lit(None, dtype=pl.Int64).alias("lot_size")),
+        lambda today, folder="signals": signals(list("ABCDEFGH")).with_columns(
+            pl.lit(None, dtype=pl.Int64).alias("lot_size")
+        ),
     )  # cash book: no futures lot needed
     monkeypatch.setattr(pl_live, "export", lambda con: None)
     con = connect(tmp_path / "paper.db")
@@ -150,7 +156,7 @@ def test_delivery_book_pays_cash_and_marks_shares(tmp_path, monkeypatch):
 
 def test_delivery_book_never_spends_more_than_cash(tmp_path, monkeypatch):
     monkeypatch.setattr(pl_live, "DATA", tmp_path)
-    monkeypatch.setattr(pl_live, "latest_signals", lambda today: signals(list("ABCDEFGH")))
+    monkeypatch.setattr(pl_live, "latest_signals", lambda today, folder="signals": signals(list("ABCDEFGH")))
     c = delivery_cfg()
     c = BookConfig(**{**c.__dict__, "capital": 15_000})
     r = run_open(connect(tmp_path / "paper.db"), c, quotes({}), NOW)
