@@ -6,6 +6,7 @@ import type { Kill } from "@/lib/api";
 import { when } from "@/lib/api";
 import { Badge, Button, Input } from "@/components/ui";
 import { Confirm } from "@/components/confirm";
+import { useToast } from "@/components/toast";
 
 /** Stops all new positions (exits still go through). Signed-in users only. */
 export function KillSwitch({ kill, onChange }: { kill: Kill | undefined; onChange: () => void }) {
@@ -13,6 +14,7 @@ export function KillSwitch({ kill, onChange }: { kill: Kill | undefined; onChang
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [asking, setAsking] = useState<"on" | "off" | null>(null);
+  const toast = useToast();
 
   async function set(on: boolean) {
     setAsking(null);
@@ -26,6 +28,7 @@ export function KillSwitch({ kill, onChange }: { kill: Kill | undefined; onChang
     setBusy(false);
     if (r.status === 401) window.location.href = "/login";
     else if (!r.ok) setMsg(`Failed: ${r.status}`);
+    else toast(on ? "Kill switch on: no new positions" : "Kill switch released");
     onChange();
   }
 

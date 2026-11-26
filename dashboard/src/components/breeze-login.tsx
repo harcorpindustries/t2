@@ -2,14 +2,13 @@
 
 import { useState } from "react";
 import { AlertTriangle, CheckCircle2, LogIn } from "lucide-react";
-import { useApi, when } from "@/lib/api";
+import { type BreezeStatus, useApi, when } from "@/lib/api";
 import { Badge, Button } from "@/components/ui";
 
-type Status = { has_session: boolean; saved_at: string | null; valid_today: boolean };
 
 /** Daily Breeze login: ICICI's own page, then back to /breeze/callback which saves the session. */
 export function BreezeLogin() {
-  const { data } = useApi<Status>("/api/breeze/status", 60_000);
+  const { data } = useApi<BreezeStatus>("/api/breeze/status", 60_000);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
