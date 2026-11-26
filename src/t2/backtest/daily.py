@@ -36,6 +36,7 @@ class Strategy:
     top_k: int = 10
     position_rs: float = 50_000.0
     entry_band: float = 0.01
+    slippage_bps: float = 5.0
     short: bool = True
     capital: float = 1_000_000.0
     limits: Limits = field(
@@ -81,7 +82,7 @@ def book_of(b: PaperBroker, day_start_equity: float, last: dict[str, float]) -> 
 
 def replay(preds: pl.DataFrame, bars: pl.DataFrame, s: Strategy) -> tuple[pl.DataFrame, dict]:
     """`preds`: date, symbol, score (decided after that date's close). `bars`: daily OHLCV per date and symbol."""
-    b = PaperBroker(s.capital)
+    b = PaperBroker(s.capital, slippage_bps=s.slippage_bps)
     risk = RiskManager(s.limits)
     days = bars.select(pl.col("date").unique().sort())["date"].to_list()
     next_day = dict(itertools.pairwise(days))
@@ -132,7 +133,7 @@ def replay(preds: pl.DataFrame, bars: pl.DataFrame, s: Strategy) -> tuple[pl.Dat
                 "date": nd,
                 "equity": end_eq,
                 "pnl": end_eq - start_eq,
-                "ret": (end_eq - start_eq) / start_eq,
+                "ret": (end_eq - start_eq) / s.capital,  # on fixed capital: sizes do not compound
                 "charges": sum(f.charges for f in day_fills),
                 "orders": len(orders),
                 "placed": placed,
@@ -150,14 +151,13 @@ def summarize(daily: pl.DataFrame, s: Strategy, kill_days: int = 0) -> dict:
         return {}
     r = daily["ret"]
     eq = daily["equity"]
-    years = daily.height / 252
-    total = _f(eq[-1]) / s.capital
     sd = _f(r.std())
-    dd = _f((eq / eq.cum_max() - 1).min())
+    dd = _f(((eq - eq.cum_max()) / s.capital).min())  # in units of the fixed capital
     return {
         "days": daily.height,
         "final_equity": _f(eq[-1]),
-        "cagr": total ** (1 / years) - 1 if total > 0 and years > 0 else -1.0,
+        "annual_return": _f(r.mean()) * 252,  # simple, on fixed capital
+        "total_pnl": _f(eq[-1]) - s.capital,
         "sharpe": _f(r.mean()) / sd * math.sqrt(252) if sd > 0 else 0.0,
         "max_drawdown": dd,
         "hit_rate": _f((r > 0).mean()),
@@ -178,7 +178,7 @@ def yearly(daily: pl.DataFrame) -> pl.DataFrame:
     return (
         daily.group_by(pl.col("date").dt.year().alias("year"))
         .agg(
-            ((pl.col("ret") + 1).product() - 1).alias("return"),
+            pl.col("ret").sum().alias("return"),
             (pl.col("ret").mean() / pl.col("ret").std() * math.sqrt(252)).alias("sharpe"),
             (pl.col("ret") > 0).mean().alias("hit_rate"),
             pl.col("charges").sum().alias("charges"),
@@ -189,7 +189,13 @@ def yearly(daily: pl.DataFrame) -> pl.DataFrame:
 
 
 def run(args: argparse.Namespace) -> None:
-    s = Strategy(top_k=args.top_k, position_rs=args.position_rs, entry_band=args.entry_band, short=not args.long_only)
+    s = Strategy(
+        top_k=args.top_k,
+        position_rs=args.position_rs,
+        entry_band=args.entry_band,
+        slippage_bps=args.slippage_bps,
+        short=not args.long_only,
+    )
     preds = pl.read_parquet(args.preds)
     root = eod.fetch(Path(args.data), offline=args.offline)
     bars = (
@@ -206,7 +212,10 @@ def run(args: argparse.Namespace) -> None:
     yr = yearly(daily)
     report = {"strategy": asdict(s), "summary": summary, "yearly": yr.to_dicts()}
     (out / "report.json").write_text(json.dumps(report, indent=2, default=str))
-    lines = [f"## Sandbox replay (top/bottom {s.top_k}, Rs {s.position_rs:,.0f}/position, band {s.entry_band:.1%})", ""]
+    head = (
+        f"top/bottom {s.top_k}, Rs {s.position_rs:,.0f}/position, band {s.entry_band:.1%}, slip {s.slippage_bps:g} bps"
+    )
+    lines = [f"## Sandbox replay ({head})", ""]
     lines += [f"- {k}: {v:,.4f}" if isinstance(v, float) else f"- {k}: {v}" for k, v in summary.items()]
     lines += ["", "| year | return | sharpe | hit_rate | charges | fill_rate |", "|---|---|---|---|---|---|"]
     for row in yr.iter_rows(named=True):
@@ -230,6 +239,7 @@ def main() -> None:
     r.add_argument("--top-k", type=int, default=10)
     r.add_argument("--position-rs", type=float, default=50_000.0)
     r.add_argument("--entry-band", type=float, default=0.01)
+    r.add_argument("--slippage-bps", type=float, default=5.0)
     r.add_argument("--long-only", action="store_true")
     r.add_argument("--data", default="data/hf")
     r.add_argument("--offline", action="store_true", help="use data already in --data, skip the hub")
