@@ -101,3 +101,57 @@ def test_holiday_and_stale_signals_skip(tmp_path, monkeypatch):
 def test_config_file_loads():
     c = BookConfig.load()
     assert c.k == 10 and c.exit_k == 50 and c.risk.allow_kinds == ("fut",)
+
+
+def delivery_cfg() -> BookConfig:
+    lim = Limits(
+        capital=60_000.0,
+        max_order_value=15_000,
+        max_position_value=15_000,
+        max_open_positions=6,
+        max_daily_loss=5_000,
+        max_price_deviation=0.05,
+        allow_kinds=("eq",),
+        allow_products=("delivery",),
+    )
+    return BookConfig(
+        capital=50_000,
+        k=3,
+        exit_k=4,
+        notional_per_position=10_000,
+        slippage_bps=5,
+        roll_days=0,
+        risk=lim,
+        vehicle="delivery",
+        long_only=True,
+    )
+
+
+def test_delivery_book_pays_cash_and_marks_shares(tmp_path, monkeypatch):
+    monkeypatch.setattr(pl_live, "DATA", tmp_path)
+    monkeypatch.setattr(
+        pl_live,
+        "latest_signals",
+        lambda today: signals(list("ABCDEFGH")).with_columns(pl.lit(None, dtype=pl.Int64).alias("lot_size")),
+    )  # cash book: no futures lot needed
+    monkeypatch.setattr(pl_live, "export", lambda con: None)
+    con = connect(tmp_path / "paper.db")
+    c = delivery_cfg()
+    r = run_open(con, c, quotes({}), NOW)
+    held = positions(con)
+    assert (
+        r["filled"] == 3 and set(held) == {"A", "B", "C"} and all(p["qty"] == 10 for p in held.values())
+    )  # 10k / 1000
+    cash_left = pl_live.cash(con, c)
+    assert cash_left == pytest.approx(50_000 - 3 * 10 * 1000.5 - r["charges"])
+    out = run_close(con, c, quotes({"A": 1100.0, "B": 1000.0, "C": 900.0}), NOW.replace(hour=15, minute=35))
+    assert out["equity"] == pytest.approx(cash_left + 10 * (1100 + 1000 + 900))
+
+
+def test_delivery_book_never_spends_more_than_cash(tmp_path, monkeypatch):
+    monkeypatch.setattr(pl_live, "DATA", tmp_path)
+    monkeypatch.setattr(pl_live, "latest_signals", lambda today: signals(list("ABCDEFGH")))
+    c = delivery_cfg()
+    c = BookConfig(**{**c.__dict__, "capital": 15_000})
+    r = run_open(connect(tmp_path / "paper.db"), c, quotes({}), NOW)
+    assert r["filled"] == 1 and r["blocked"] == 2
