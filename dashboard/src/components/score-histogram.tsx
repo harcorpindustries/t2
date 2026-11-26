@@ -21,9 +21,9 @@ export function ScoreHistogram({ scores }: { scores: number[] }) {
           <YAxis tickLine={false} axisLine={false} fontSize={12} stroke="var(--muted-foreground)" width={36} allowDecimals={false} />
           <Tooltip cursor={{ fill: "var(--muted)" }}
             formatter={(v) => [`${v} stocks`, "count"]} labelFormatter={(_, p) => (p?.[0]?.payload?.label as string) ?? ""}
-            contentStyle={{ borderRadius: 16, border: "none", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
+            contentStyle={{ borderRadius: 8, border: "none", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)",
               background: "var(--card)", color: "var(--foreground)" }} />
-          <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+          <Bar dataKey="count" radius={[2, 2, 0, 0]}>
             {data.map((d, i) => <Cell key={i} fill={d.mid >= 0 ? "var(--up)" : "var(--down)"} />)}
           </Bar>
         </BarChart>

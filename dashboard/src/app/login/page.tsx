@@ -31,7 +31,7 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-[70vh] items-center justify-center">
-      <form onSubmit={submit} className="w-full max-w-sm rounded-2xl bg-card p-8 ring-1 ring-foreground/10">
+      <form onSubmit={submit} className="w-full max-w-sm rounded-xl bg-card p-8 ring-1 ring-foreground/10">
         <div className="mb-6 flex items-center gap-3">
           <LockKeyhole className="size-5" />
           <h1 className="text-2xl font-semibold">T2</h1>

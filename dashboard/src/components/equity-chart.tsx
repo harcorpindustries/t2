@@ -21,7 +21,7 @@ export function EquityChart({ points }: { points: { day: string; equity: number 
           <XAxis dataKey="day" tickLine={false} axisLine={false} fontSize={12} stroke="var(--muted-foreground)" minTickGap={32} />
           <YAxis tickLine={false} axisLine={false} fontSize={12} stroke="var(--muted-foreground)" width={90}
             domain={["auto", "auto"]} tickFormatter={(v: number) => rupees(v)} />
-          <Tooltip formatter={(v) => rupees(Number(v))} contentStyle={{ borderRadius: 16, border: "none",
+          <Tooltip formatter={(v) => rupees(Number(v))} contentStyle={{ borderRadius: 8, border: "none",
             boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)", background: "var(--card)", color: "var(--foreground)" }} />
           <Area type="monotone" dataKey="equity" stroke="var(--brand)" strokeWidth={2} fill="url(#eq)" />
         </AreaChart>

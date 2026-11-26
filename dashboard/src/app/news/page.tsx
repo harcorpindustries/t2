@@ -58,7 +58,7 @@ export default function NewsPage() {
       <div className="mb-4 flex flex-wrap gap-2">
         {GROUPS.map((g) => (
           <button key={g.key} type="button" onClick={() => { setGroup(g.key); setOpen(null); }}
-            className={cn("h-11 rounded-full px-5 text-sm font-medium transition-colors",
+            className={cn("h-11 rounded-md px-5 text-sm font-medium transition-colors",
               group === g.key ? "bg-brand/15 text-brand" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>
             {g.label}
           </button>
@@ -91,17 +91,17 @@ export default function NewsPage() {
                 <span>{n.source.replace(/_/g, " ")}</span><span>·</span><span>{when(n.published_at ?? n.first_seen_at)}</span>
                 {(n.tickers ?? "").split(",").filter(Boolean).slice(0, 6).map((t) => (
                   <button key={t} type="button" onClick={() => { setSymbol(t); setQuery(`&symbol=${t}`); }}
-                    className="rounded-full bg-up/15 px-2.5 py-1 font-medium text-up hover:bg-up/25">{t}</button>
+                    className="rounded-md bg-up/15 px-2.5 py-1 font-medium text-up hover:bg-up/25">{t}</button>
                 ))}
                 {n.has_text ? (
                   <button type="button" onClick={() => setOpen(open === n.id ? null : n.id)}
-                    className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 font-medium text-foreground hover:bg-muted">
+                    className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 font-medium text-foreground hover:bg-muted">
                     <BookOpen className="size-3.5" />{open === n.id ? "Hide" : "Read"}
                   </button>
                 ) : null}
                 {n.raw_url && (
                   <a href={n.raw_url} target="_blank" rel="noreferrer noopener"
-                    className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 hover:bg-muted">
+                    className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 hover:bg-muted">
                     <FileText className="size-3.5" />raw {n.raw_type?.toUpperCase()}
                   </a>
                 )}

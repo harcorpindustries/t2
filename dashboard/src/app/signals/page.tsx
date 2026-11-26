@@ -12,18 +12,38 @@ type Row = { rank: number; symbol: string; score: number; close: number; lot_siz
 function SignalList({ rows, held, max, side }: { rows: Row[]; held: Set<string>; max: number; side: "up" | "down" }) {
   if (!rows.length) return <p className="py-6 text-sm text-muted-foreground">No signals yet.</p>;
   return (
-    <ul className="-mx-2">
-      {rows.map((r) => (
-        <li key={r.symbol} className="flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-muted/60">
-          <span className={cn("inline-flex h-7 w-11 shrink-0 items-center justify-center rounded-full text-xs font-semibold tabular-nums",
-            side === "up" ? "bg-up/15 text-up" : "bg-down/15 text-down")}>{r.rank}</span>
-          <span className="min-w-28 font-medium">{r.symbol}</span>
-          <span className="w-16 shrink-0">{held.has(r.symbol) && <Badge kind="brand">Held</Badge>}</span>
-          <ScoreBar score={r.score} max={max} />
-          <span className="ml-auto hidden text-sm tabular-nums text-muted-foreground sm:block">{rupees(r.close)}</span>
-        </li>
-      ))}
-    </ul>
+    <div className="-mx-2 overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-left text-xs font-medium text-muted-foreground">
+            <th className="px-2 pb-2 font-medium">Rank</th>
+            <th className="px-2 pb-2 font-medium">Symbol</th>
+            <th className="px-2 pb-2 font-medium">Score</th>
+            <th className="px-2 pb-2 text-right font-medium">Close</th>
+            <th className="px-2 pb-2 text-right font-medium">Lot</th>
+            <th className="px-2 pb-2 font-medium">Futures expiry</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.symbol} className="hover:bg-muted/60">
+              <td className="rounded-l-md px-2 py-2">
+                <span className={cn("inline-flex h-7 w-11 items-center justify-center rounded-md text-xs font-semibold tabular-nums",
+                  side === "up" ? "bg-up/15 text-up" : "bg-down/15 text-down")}>{r.rank}</span>
+              </td>
+              <td className="whitespace-nowrap px-2 py-2">
+                <span className="font-medium">{r.symbol}</span>
+                {held.has(r.symbol) && <span className="ml-2"><Badge kind="brand">Held</Badge></span>}
+              </td>
+              <td className="px-2 py-2"><ScoreBar score={r.score} max={max} /></td>
+              <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums">{rupees(r.close)}</td>
+              <td className="px-2 py-2 text-right tabular-nums">{r.lot_size ?? "–"}</td>
+              <td className="whitespace-nowrap rounded-r-md px-2 py-2 tabular-nums text-muted-foreground">{r.fut_expiry ?? "–"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -51,7 +71,7 @@ export default function SignalsPage() {
       <Card title="Score distribution" className="mb-5">
         <ScoreHistogram scores={rows.map((r) => r.score)} />
       </Card>
-      <div className="grid gap-5 xl:grid-cols-2">
+      <div className="grid gap-5 2xl:grid-cols-2">
         <Card title={<span className="flex items-center gap-2"><TrendingUp className="size-5 text-up" />Strongest</span>}>
           <SignalList rows={top} held={held} max={max} side="up" />
         </Card>

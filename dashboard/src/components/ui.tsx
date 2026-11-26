@@ -6,7 +6,7 @@ export function Card({ title, action, children, className }: {
   title?: ReactNode; action?: ReactNode; children: ReactNode; className?: string;
 }) {
   return (
-    <section className={cn("rounded-2xl bg-card p-6 text-card-foreground ring-1 ring-foreground/10", className)}>
+    <section className={cn("rounded-xl bg-card p-6 text-card-foreground ring-1 ring-foreground/10", className)}>
       {(title || action) && (
         <header className="mb-4 flex min-h-11 items-center justify-between gap-4">
           {title && <h2 className="text-lg font-semibold">{title}</h2>}
@@ -48,7 +48,7 @@ export type BadgeKind = "muted" | "danger" | "ok" | "up" | "down" | "brand" | "w
 /** Colored chips. Status kinds (ok/danger/warn) should carry an icon or a word, never color alone. */
 export function Badge({ children, kind = "muted" }: { children: ReactNode; kind?: BadgeKind }) {
   return (
-    <span className={cn("inline-flex h-7 items-center gap-1.5 rounded-full px-3 text-xs font-medium",
+    <span className={cn("inline-flex h-7 items-center gap-1.5 rounded-md px-3 text-xs font-medium",
       kind === "muted" && "bg-muted text-muted-foreground",
       kind === "danger" && "bg-down/15 text-down",
       kind === "ok" && "bg-good/15 text-good",
@@ -65,7 +65,7 @@ export function Button({ children, onClick, variant = "primary", disabled, type 
 }) {
   return (
     <button type={type} onClick={onClick} disabled={disabled}
-      className={cn("inline-flex h-11 items-center justify-center gap-2 rounded-full px-5 text-sm font-medium",
+      className={cn("inline-flex h-11 items-center justify-center gap-2 rounded-md px-5 text-sm font-medium",
         "transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
         "disabled:pointer-events-none disabled:opacity-50",
         variant === "primary" && "bg-brand text-brand-foreground hover:bg-brand/80",
@@ -79,7 +79,7 @@ export function Button({ children, onClick, variant = "primary", disabled, type 
 
 export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props}
-    className={cn("h-11 rounded-[26px] border border-input bg-transparent px-4 text-base outline-none",
+    className={cn("h-11 rounded-md border border-input bg-transparent px-4 text-base outline-none",
       "focus:border-ring focus:ring-[3px] focus:ring-ring/50", props.className)} />;
 }
 
