@@ -17,6 +17,7 @@ import re
 import sys
 import tempfile
 import zipfile
+from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -120,10 +121,13 @@ def _india_economy(x: list[str]) -> bool:
 _TITLE = re.compile(r"<PAGE_TITLE>(.*?)</PAGE_TITLE>", re.S)
 
 
-def parse_rows(text: str) -> tuple[list[dict[str, object]], int]:
+def parse_rows(lines: str | Iterable[str]) -> tuple[list[dict[str, object]], int]:
+    if isinstance(lines, str):
+        lines = lines.splitlines()
     kept: list[dict[str, object]] = []
     total = 0
-    for line in text.splitlines():
+    for raw_line in lines:
+        line = raw_line.rstrip("\r\n")
         total += 1
         head = line.split("\t", 4)
         if len(head) < 5:
@@ -171,9 +175,9 @@ def fetch_file(client: httpx.Client, ts: str) -> tuple[dict[str, object], list[d
                 status = "not_published"
                 break
             if r.status_code == 200:
-                with zipfile.ZipFile(io.BytesIO(r.content)) as z:
-                    text = z.read(z.namelist()[0]).decode("utf-8", "replace")
-                rows, total = parse_rows(text)
+                # stream the member line by line: 2015-16 files unzip to 40 MB+, some far larger
+                with zipfile.ZipFile(io.BytesIO(r.content)) as z, z.open(z.namelist()[0]) as fh:
+                    rows, total = parse_rows(io.TextIOWrapper(fh, encoding="utf-8", errors="replace"))
                 status = "ok"
                 break
         except (httpx.HTTPError, zipfile.BadZipFile) as exc:
@@ -207,38 +211,47 @@ def tag_symbols(df: pl.DataFrame) -> pl.DataFrame:
     return df.with_columns(pl.Series("tickers", [tickers.tag(t, m) for t in texts], dtype=pl.List(pl.Utf8)))
 
 
+CHUNK_FILES = 576  # 6 days of 15-minute files: progress is saved to HF after each chunk
+
+
 def cmd_backfill(month: str) -> None:
     year = month[:4]
     data_rel, ledger_rel = f"news_gdelt/year={year}/{month}.parquet", f"_ledger/gdelt/{month}.parquet"
     with tempfile.TemporaryDirectory() as tmp:
-        dl, stage = Path(tmp) / "dl", Path(tmp) / "stage"
+        dl = Path(tmp) / "dl"
         old_ledger_p, old_data_p = hf_store.download(ledger_rel, dl), hf_store.download(data_rel, dl)
-        old_ledger = pl.read_parquet(old_ledger_p) if old_ledger_p else pl.DataFrame(schema=LEDGER_SCHEMA)
-        old_data = pl.read_parquet(old_data_p) if old_data_p else None
-        done = set(old_ledger.filter(pl.col("status").is_in(["ok", "not_published"]))["file_ts"].to_list())
-        todo = [ts for ts in month_files(month) if ts not in done]
-        print(f"gdelt {month}: {len(todo)} files to fetch ({len(done)} already done)")
-        if not todo:
-            return
-        ledgers, articles = [], []
-        with httpx.Client(timeout=120, follow_redirects=True) as client, ThreadPoolExecutor(WORKERS) as pool:
-            for led, rows in pool.map(lambda ts: fetch_file(client, ts), todo):
-                ledgers.append(led)
-                articles.extend(rows)
-        new_ledger = pl.DataFrame(ledgers, schema=LEDGER_SCHEMA)
-        ledger = (
-            pl.concat([old_ledger.filter(pl.col("file_ts").is_in(done)), new_ledger]).unique("file_ts").sort("file_ts")
+        ledger = pl.read_parquet(old_ledger_p) if old_ledger_p else pl.DataFrame(schema=LEDGER_SCHEMA)
+        data = (
+            pl.read_parquet(old_data_p)
+            if old_data_p
+            else pl.DataFrame(schema={**ARTICLE_SCHEMA, "tickers": pl.List(pl.Utf8)})
         )
-        new_data = tag_symbols(pl.DataFrame(articles, schema=ARTICLE_SCHEMA))
-        frames = [f for f in (old_data, new_data) if f is not None and not f.is_empty()]
-        data = pl.concat(frames).unique("gkg_id").sort("published_at") if frames else new_data
-        (stage / Path(data_rel).parent).mkdir(parents=True)
-        (stage / Path(ledger_rel).parent).mkdir(parents=True)
-        data.write_parquet(stage / data_rel, compression="zstd")
-        ledger.write_parquet(stage / ledger_rel)
-        print(new_ledger.group_by("status").len().sort("status"))
-        print(f"articles kept: {new_data.height} new, {data.height} total for {month}")
-        hf_store.upload_folder(stage, f"gdelt {month}: {len(todo)} files, {new_data.height} articles")
+        done = set(ledger.filter(pl.col("status").is_in(["ok", "not_published"]))["file_ts"].to_list())
+        ledger = ledger.filter(pl.col("file_ts").is_in(done))
+        todo = [ts for ts in month_files(month) if ts not in done]
+        print(f"gdelt {month}: {len(todo)} files to fetch ({len(done)} already done)", flush=True)
+        for i in range(0, len(todo), CHUNK_FILES):
+            chunk = todo[i : i + CHUNK_FILES]
+            ledgers, articles = [], []
+            with httpx.Client(timeout=120, follow_redirects=True) as client, ThreadPoolExecutor(WORKERS) as pool:
+                for led, rows in pool.map(lambda ts: fetch_file(client, ts), chunk):
+                    ledgers.append(led)
+                    articles.extend(rows)
+            new_ledger = pl.DataFrame(ledgers, schema=LEDGER_SCHEMA)
+            new_data = tag_symbols(pl.DataFrame(articles, schema=ARTICLE_SCHEMA))
+            ledger = pl.concat([ledger, new_ledger]).unique("file_ts", keep="last").sort("file_ts")
+            data = pl.concat([data, new_data], how="diagonal_relaxed").unique("gkg_id").sort("published_at")
+            stage = Path(tmp) / f"stage{i}"
+            (stage / Path(data_rel).parent).mkdir(parents=True)
+            (stage / Path(ledger_rel).parent).mkdir(parents=True)
+            data.write_parquet(stage / data_rel, compression="zstd")
+            ledger.write_parquet(stage / ledger_rel)
+            counts = dict(new_ledger.group_by("status").len().iter_rows())
+            print(
+                f"{month} {chunk[0]}..{chunk[-1]}: {counts}, +{new_data.height} articles, {data.height} total",
+                flush=True,
+            )
+            hf_store.upload_folder(stage, f"gdelt {month}: {chunk[0]}..{chunk[-1]}, {new_data.height} articles")
 
 
 def main(argv: list[str] | None = None) -> int:
