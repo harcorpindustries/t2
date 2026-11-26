@@ -1,0 +1,13 @@
+{
+  "capital": 0,
+  "max_order_value": 0,
+  "max_position_value": 0,
+  "max_open_positions": 0,
+  "max_daily_loss": 0,
+  "max_orders_per_sec": 2,
+  "max_orders_per_day": 50,
+  "max_price_deviation": 0.02,
+  "allow_kinds": ["eq"],
+  "allow_products": ["intraday", "delivery"],
+  "allow_short_options": false
+}
