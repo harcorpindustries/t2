@@ -1,0 +1,17 @@
+[Unit]
+Description=t2 dashboard (API + static UI on 127.0.0.1:8080; reach it through an SSH tunnel)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/opt/t2/app
+EnvironmentFile=/opt/t2/.env
+Environment=T2_PAPER_DIR=/opt/t2/data
+Environment=T2_DASHBOARD_DIR=/opt/t2/dashboard
+ExecStart=/usr/local/bin/uv run --frozen uvicorn t2.dashboard.api:app --host 127.0.0.1 --port 8080
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

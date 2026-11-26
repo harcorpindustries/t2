@@ -37,3 +37,9 @@ out/
 .idea/
 .vscode/
 /reports/
+
+# dashboard build
+node_modules/
+.next/
+/dashboard/out/
+/dashboard/next-env.d.ts
