@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Activity, BarChart3, Brain, LayoutDashboard, ListOrdered, Newspaper } from "lucide-react";
+import { Activity, BarChart3, Brain, LayoutDashboard, ListOrdered, LogOut, Newspaper } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 const items = [
@@ -14,8 +14,14 @@ const items = [
   { href: "/system", label: "System", icon: Activity },
 ];
 
+async function signOut() {
+  await fetch("/api/logout", { method: "POST" });
+  window.location.href = "/login";
+}
+
 export function Nav() {
   const path = usePathname();
+  if (path.startsWith("/login")) return null;
   return (
     <nav className="flex gap-1 overflow-x-auto md:flex-col">
       {items.map(({ href, label, icon: Icon }) => {
@@ -29,6 +35,11 @@ export function Nav() {
           </Link>
         );
       })}
+      <button type="button" onClick={signOut}
+        className="flex h-11 items-center gap-3 rounded-full px-4 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground">
+        <LogOut className="size-4" />
+        Sign out
+      </button>
     </nav>
   );
 }
