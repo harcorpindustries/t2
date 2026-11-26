@@ -1,0 +1,35 @@
+name: news-embed
+
+# Turns every stock-tagged headline into a 384-number meaning vector (bge-small, CPU) and stores them on the
+# dataset repo as news_emb/year=YYYY.parquet, for the neural challenger. One job per year.
+on:
+  workflow_dispatch:
+    inputs:
+      years:
+        description: Years (JSON list)
+        default: '[2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026]'
+
+permissions:
+  contents: read
+
+jobs:
+  embed:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        year: ${{ fromJSON(inputs.years) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen
+      - name: CPU-only torch and the sentence encoder (not part of the server install)
+        run: |
+          uv pip install torch --index-url https://download.pytorch.org/whl/cpu
+          uv pip install sentence-transformers
+      - name: Embed ${{ matrix.year }}
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: uv run --no-sync python -m t2.news.embed --year ${{ matrix.year }} --out reports/news_emb --publish

@@ -18,6 +18,7 @@ import os
 from datetime import UTC, datetime, time
 from pathlib import Path
 
+import numpy as np
 import polars as pl
 
 from t2.data.hf_store import DATASET_REPO
@@ -87,6 +88,19 @@ def fetch_news(dest: Path, offline: bool = False) -> Path:
     return dest
 
 
+def assign_sessions(arts: pl.DataFrame, sessions: list) -> pl.DataFrame:
+    """Add `date`: the first session whose close (15:30 IST) is at or after the article's publication."""
+    closes = pl.DataFrame(
+        {
+            "date": sessions,
+            "close_ts": [datetime.combine(d, CLOSE_UTC, tzinfo=UTC) for d in sessions],
+        }
+    ).sort("close_ts")
+    arts = arts.with_columns(pl.col("published_at").dt.convert_time_zone("UTC")).sort("published_at")
+    out = arts.join_asof(closes, left_on="published_at", right_on="close_ts", strategy="forward")
+    return out.filter(pl.col("date").is_not_null()).drop("close_ts")
+
+
 def news_by_session(root: Path, sessions: list) -> pl.DataFrame:
     """(date, symbol, n, tone_sum): articles assigned to the first session whose close is at or after publication."""
     arts = (
@@ -96,22 +110,34 @@ def news_by_session(root: Path, sessions: list) -> pl.DataFrame:
         .explode("tickers")
         .rename({"tickers": "symbol"})
         .unique(["published_at", "symbol", "tone"])
-        .sort("published_at")
         .collect()
     )
-    closes = pl.DataFrame(
-        {
-            "date": sessions,
-            "close_ts": [datetime.combine(d, CLOSE_UTC, tzinfo=UTC) for d in sessions],
-        }
-    ).sort("close_ts")
-    arts = arts.with_columns(pl.col("published_at").dt.convert_time_zone("UTC"))
-    tagged = arts.join_asof(closes, left_on="published_at", right_on="close_ts", strategy="forward")
     return (
-        tagged.filter(pl.col("date").is_not_null())
+        assign_sessions(arts, sessions)
         .group_by("date", "symbol")
         .agg(pl.len().alias("n"), pl.col("tone").sum().alias("tone_sum"))
     )
+
+
+def news_emb_by_session(arts: pl.DataFrame, emb: np.ndarray, sessions: list) -> tuple[pl.DataFrame, np.ndarray]:
+    """Mean headline vector per (session, stock).
+
+    arts: one row per article with published_at and tickers, aligned with emb (N, dim).
+    Returns (keys: date, symbol, n) and the matching (G, dim) float32 means, rescaled to unit length."""
+    rows = assign_sessions(
+        arts.select("published_at", "tickers").with_row_index("i").explode("tickers").rename({"tickers": "symbol"}),
+        sessions,
+    ).filter(pl.col("symbol").is_not_null())
+    if not rows.height:
+        return pl.DataFrame(schema={"date": pl.Date, "symbol": pl.Utf8, "n": pl.UInt32}), np.zeros(
+            (0, emb.shape[1]), dtype=np.float32
+        )
+    rows = rows.sort("date", "symbol")
+    keys = rows.group_by("date", "symbol", maintain_order=True).agg(pl.len().alias("n"))
+    starts = np.concatenate([[0], np.cumsum(keys["n"].to_numpy())[:-1]]).astype(np.int64)
+    sums = np.add.reduceat(emb[rows["i"].to_numpy()].astype(np.float32), starts, axis=0)
+    norm = np.linalg.norm(sums, axis=1, keepdims=True)
+    return keys, (sums / np.where(norm > 0, norm, 1.0)).astype(np.float32)
 
 
 def add_news(panel: pl.DataFrame, root: Path) -> pl.DataFrame:

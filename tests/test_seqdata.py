@@ -71,3 +71,29 @@ def test_rank_ic():
     x = np.arange(50, dtype=float)
     assert abs(seqdata.rank_ic(x, x) - 1) < 1e-9 and abs(seqdata.rank_ic(x, -x) + 1) < 1e-9
     assert np.isnan(seqdata.rank_ic(x[:5], x[:5]))
+
+
+def test_pca_fit_only_on_rows_before_the_cutoff():
+    rng = np.random.default_rng(0)
+    n = 400
+    dates = [date(2020, 1, 1) + timedelta(days=i) for i in range(n)]
+    vecs = rng.normal(size=(n, 16)).astype(np.float32)
+    vecs[:, 0] *= 5  # dominant direction in every year
+    late = np.array([d >= date(2020, 9, 1) for d in dates])
+    vecs[late, 1] += 50  # something that only happens after the cutoff must not shape the compression
+    keys = pl.DataFrame({"date": dates, "symbol": ["A"] * n})
+    cols, names = seqdata.news_columns(keys, vecs, date(2020, 9, 1), 2)
+    assert names == ["news_e0", "news_e1"] and cols.height == n
+    _, comp = seqdata.pca_fit(vecs[~late], 2)
+    assert abs(comp[0, 0]) > 0.9 and abs(comp[0, 1]) < 0.2
+    z = vecs @ comp.T
+    assert np.allclose(np.corrcoef(cols["news_e0"].to_numpy(), z[:, 0])[0, 1], 1.0, atol=1e-4)
+
+
+def test_pca_needs_enough_training_rows():
+    keys = pl.DataFrame({"date": [date(2021, 1, 1)] * 5, "symbol": ["A"] * 5})
+    try:
+        seqdata.news_columns(keys, np.zeros((5, 8), dtype=np.float32), date(2021, 1, 1), 4)
+    except ValueError:
+        return
+    raise AssertionError("expected a ValueError")
