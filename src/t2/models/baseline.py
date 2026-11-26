@@ -25,7 +25,7 @@ import numpy as np
 import polars as pl
 
 from t2.brokers.base import Kind, Product, Side
-from t2.features import eod
+from t2.features import eod, extra
 from t2.trader.costs import charges
 
 PARAMS = {
@@ -51,6 +51,7 @@ class Config:
     top_k: int = 20
     position_rs: float = 50_000.0
     slippage_bps: float = 5.0
+    extras: tuple[str, ...] = ()  # extra feature groups: "fno", "news"
     universe: str = "all"  # stocks the portfolio trades: all liquid EQ, or point-in-time F&O stocks
     train_universe: str = "all"
 
@@ -138,9 +139,14 @@ def _num(x: object) -> float:
     return float(x) if isinstance(x, int | float) else 0.0
 
 
+def features(cfg: Config) -> list[str]:
+    groups = {"fno": extra.FNO, "news": extra.NEWS}
+    return eod.FEATURES + [c for g in cfg.extras for c in groups[g]]
+
+
 def train(df: pl.DataFrame, cfg: Config) -> lgb.Booster:
     data = with_label(df, cfg.target)
-    ds = lgb.Dataset(data.select(eod.FEATURES).to_numpy(), label=data["label"].to_numpy(), free_raw_data=True)
+    ds = lgb.Dataset(data.select(features(cfg)).to_numpy(), label=data["label"].to_numpy(), free_raw_data=True)
     return lgb.train(PARAMS, ds, num_boost_round=cfg.rounds)
 
 
@@ -165,7 +171,7 @@ def walk_forward(
         t0 = time.time()
         model = train(tr, cfg)
         test = test.filter(pl.col(cfg.target).is_not_null())
-        scored = test.with_columns(pl.Series("score", np.asarray(model.predict(test.select(eod.FEATURES).to_numpy()))))
+        scored = test.with_columns(pl.Series("score", np.asarray(model.predict(test.select(features(cfg)).to_numpy()))))
         m = {"year": y, "train_rows": tr.height, "train_end": str(train_end), "secs": round(time.time() - t0, 1)}
         m |= evaluate(scored, cfg)
         print(json.dumps({k: round(v, 4) if isinstance(v, float) else v for k, v in m.items()}), flush=True)
@@ -201,11 +207,16 @@ def run(args: argparse.Namespace) -> None:
         top_k=args.top_k,
         universe=args.universe,
         train_universe=args.train_universe,
+        extras=tuple(x for x in args.extras.split(",") if x),
     )
-    fno = "fno" in (cfg.universe, cfg.train_universe)
+    fno = "fno" in (cfg.universe, cfg.train_universe) or "fno" in cfg.extras
     root = eod.fetch(Path(args.data), fno=fno, offline=args.offline)
     t0 = time.time()
     full = eod.build(eod.load(root))
+    if "fno" in cfg.extras:
+        full = extra.add_fno(full, root)
+    if "news" in cfg.extras:
+        full = extra.add_news(full, extra.fetch_news(root, offline=args.offline))
     members = eod.fno_members(root) if fno else None
     pick = {"all": full, "fno": full.join(members, on=["date", "symbol"]) if members is not None else full}
     panel, train_panel = pick[cfg.universe], pick[cfg.train_universe]
@@ -234,8 +245,8 @@ def run(args: argparse.Namespace) -> None:
     # the live candidate: same recipe trained on the most recent window
     final = train(train_panel.filter(pl.col("date") >= date(last.year - cfg.train_years, 1, 1)), cfg)
     final.save_model(str(out / "model.txt"))
-    (out / "features.json").write_text(json.dumps(eod.FEATURES))
-    imp = sorted(zip(eod.FEATURES, final.feature_importance("gain").tolist(), strict=True), key=lambda x: -x[1])
+    (out / "features.json").write_text(json.dumps(features(cfg)))
+    imp = sorted(zip(features(cfg), final.feature_importance("gain").tolist(), strict=True), key=lambda x: -x[1])
     (out / "importance.json").write_text(json.dumps(imp, indent=2))
 
 
@@ -248,6 +259,7 @@ def main() -> None:
     r.add_argument("--train-years", type=int, default=6)
     r.add_argument("--rounds", type=int, default=300)
     r.add_argument("--top-k", type=int, default=20)
+    r.add_argument("--extras", default="", help="comma list of extra feature groups: fno,news")
     r.add_argument("--universe", choices=["all", "fno"], default="all")
     r.add_argument("--train-universe", choices=["all", "fno"], default="all")
     r.add_argument("--data", default="data/hf")

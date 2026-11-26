@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 from dataclasses import asdict, dataclass
 from datetime import date
 from pathlib import Path
@@ -154,6 +155,24 @@ def main() -> None:
         recent = [y for y in results[ek]["yearly"] if y["year"] >= 2019]
         print("   " + "  ".join(f"{y['year']}:{y['annual_return']:+.0%}" for y in recent), flush=True)
     (out / "report.json").write_text(json.dumps(results, indent=2, default=str))
+    lines = [
+        "| exit_k | annual | sharpe | max_dd | cost bps/day | trades/day | "
+        + " | ".join(str(y["year"]) for y in results[a.exit_k[0]]["yearly"] if y["year"] >= 2016)
+        + " |"
+    ]
+    lines.append("|" + "---|" * (6 + sum(1 for y in results[a.exit_k[0]]["yearly"] if y["year"] >= 2016)))
+    for ek, res in results.items():
+        o = res["overall"]
+        yrs = " | ".join(f"{y['annual_return']:+.0%}" for y in res["yearly"] if y["year"] >= 2016)
+        lines.append(
+            f"| {ek} | {o['annual_return']:+.1%} | {o['sharpe']:.2f} | {o['max_drawdown']:.1%} | "
+            f"{o['cost_bps']:.1f} | {o['trades_per_day']:.1f} | {yrs} |"
+        )
+    md = f"### Holding book ({Path(a.preds).parent.name})\n\n" + "\n".join(lines) + "\n"
+    (out / "report.md").write_text(md)
+    if summary := os.environ.get("GITHUB_STEP_SUMMARY"):
+        with open(summary, "a") as fh:
+            fh.write(md)
 
 
 if __name__ == "__main__":

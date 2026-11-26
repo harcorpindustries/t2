@@ -1,0 +1,61 @@
+name: experiment
+
+# Model experiments: each matrix entry trains the walk-forward baseline with one setting and scores it as a
+# multi-day futures book. Results land in the run summary and as artifacts.
+on:
+  workflow_dispatch:
+    inputs:
+      extras:
+        description: JSON list of extra feature groups to try, e.g. ["", "fno", "news", "fno,news"]
+        default: '["", "fno", "news", "fno,news"]'
+      target:
+        description: y1 or y5
+        default: "y5"
+      universe:
+        description: all or fno (stocks traded)
+        default: "fno"
+      train_universe:
+        description: all or fno (stocks learned from)
+        default: "fno"
+      exit_k:
+        description: Hold-buffer sizes to score (space separated)
+        default: "30 50 80"
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        extras: ${{ fromJSON(inputs.extras) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen
+      - name: Name
+        id: n
+        run: echo "name=${{ inputs.target }}-${{ inputs.universe }}-${{ inputs.train_universe }}-$(echo '${{ matrix.extras }}' | tr ',' '_' | sed 's/^$/base/')" >> "$GITHUB_OUTPUT"
+      - name: Walk-forward model
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: >
+          uv run python -m t2.models.baseline run
+          --target ${{ inputs.target }} --universe ${{ inputs.universe }} --train-universe ${{ inputs.train_universe }}
+          --top-k 10 --extras "${{ matrix.extras }}" --out reports/${{ steps.n.outputs.name }}
+      - name: Holding book
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: >
+          uv run python -m t2.backtest.holding run --offline
+          --preds reports/${{ steps.n.outputs.name }}/preds.parquet --exit-k ${{ inputs.exit_k }}
+          --out reports/${{ steps.n.outputs.name }}/holding
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: exp-${{ steps.n.outputs.name }}-${{ github.run_id }}
+          path: reports/${{ steps.n.outputs.name }}
+          retention-days: 90
