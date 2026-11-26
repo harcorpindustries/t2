@@ -5,14 +5,17 @@ import { CheckCircle2, OctagonX, Power } from "lucide-react";
 import type { Kill } from "@/lib/api";
 import { when } from "@/lib/api";
 import { Badge, Button, Input } from "@/components/ui";
+import { Confirm } from "@/components/confirm";
 
 /** Stops all new positions (exits still go through). Signed-in users only. */
 export function KillSwitch({ kill, onChange }: { kill: Kill | undefined; onChange: () => void }) {
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [asking, setAsking] = useState<"on" | "off" | null>(null);
 
   async function set(on: boolean) {
+    setAsking(null);
     setBusy(true);
     setMsg(null);
     const r = await fetch("/api/kill", {
@@ -38,11 +41,20 @@ export function KillSwitch({ kill, onChange }: { kill: Kill | undefined; onChang
       <div className="flex flex-wrap gap-3">
         {!on && <Input placeholder="Reason (optional)" value={reason} onChange={(e) => setReason(e.target.value)} />}
         {on ? (
-          <Button variant="outline" onClick={() => set(false)} disabled={busy}>Release</Button>
+          <Button variant="outline" onClick={() => setAsking("off")} disabled={busy}>Release</Button>
         ) : (
-          <Button variant="danger" onClick={() => set(true)} disabled={busy}><Power className="size-4" />Stop new positions</Button>
+          <Button variant="danger" onClick={() => setAsking("on")} disabled={busy}><Power className="size-4" />Stop new positions</Button>
         )}
       </div>
+      <Confirm open={asking === "on"} title="Stop all new positions?" confirmLabel="Stop new positions" danger busy={busy}
+        onConfirm={() => set(true)} onCancel={() => setAsking(null)}>
+        The trader will not open any new position until you release the switch. Exits and square-offs still go
+        through, and nothing already held is sold because of this.
+      </Confirm>
+      <Confirm open={asking === "off"} title="Release the kill switch?" confirmLabel="Release" busy={busy}
+        onConfirm={() => set(false)} onCancel={() => setAsking(null)}>
+        New positions are allowed again: the next session (09:20 IST on a trading day) will trade normally.
+      </Confirm>
       {msg && <p className="text-sm text-destructive">{msg}</p>}
     </div>
   );
