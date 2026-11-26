@@ -311,6 +311,12 @@ def risk() -> dict:
     }
 
 
+@app.get("/api/ping")
+def ping() -> dict:
+    """Small status for the top bar on every page: kill switch, Breeze session, server time."""
+    return {"kill": kill_state(), "breeze": bs.status(), "server_time": datetime.now(UTC).isoformat()}
+
+
 # ----- daily Breeze login -----
 @app.get("/api/breeze/status")
 def breeze_status() -> dict:

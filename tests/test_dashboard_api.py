@@ -123,6 +123,11 @@ def test_stock_risk_and_flatten(client, tmp_path):
     assert not (tmp_path / "FLATTEN").exists()
 
 
+def test_ping(client):
+    p = client.get("/api/ping").json()
+    assert p["kill"]["on"] is False and "valid_today" in p["breeze"]
+
+
 def test_logs_reject_other_units(client):
     assert client.get("/api/logs/sshd").status_code == 400
     assert client.get("/api/logs/t2-paper-open").status_code == 200
