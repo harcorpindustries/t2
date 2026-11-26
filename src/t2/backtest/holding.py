@@ -36,11 +36,14 @@ class HoldConfig:
     notional: float = 500_000.0  # per position (roughly one stock-futures lot)
     slippage_bps: float = 5.0
     min_hold_names: int = 40  # skip days with fewer ranked names than this
+    long_only: bool = False  # small accounts: no shorts
+    vehicle: str = "fut"  # "fut" (stock futures, carry) or "delivery" (cash stock, fully paid)
 
 
 def side_cost(price: float, side: Side, d: date, cfg: HoldConfig) -> float:
     qty = max(1, int(cfg.notional // price))
-    ch = charges(Kind.FUT, Product.CARRY, side, qty, price, d).total
+    kind, product = (Kind.FUT, Product.CARRY) if cfg.vehicle == "fut" else (Kind.EQ, Product.DELIVERY)
+    ch = charges(kind, product, side, qty, price, d).total
     return ch / (qty * price) + cfg.slippage_bps / 1e4
 
 
@@ -74,6 +77,8 @@ def run_book(df: pl.DataFrame, cfg: HoldConfig) -> pl.DataFrame:
         info = {r["symbol"]: r for r in day.iter_rows(named=True)}
 
         keep_l, keep_s, new_l, new_s = rebalance(longs, shorts, syms, cfg.k, cfg.exit_k)
+        if cfg.long_only:
+            keep_s, new_s = set(), []
         exit_l, exit_s = longs - keep_l, shorts - keep_s
 
         def ret(s: str, col: str, info: dict = info) -> float:
@@ -91,10 +96,12 @@ def run_book(df: pl.DataFrame, cfg: HoldConfig) -> pl.DataFrame:
         cost += sum(side_cost(price(s), Side.SELL, d, cfg) for s in exit_l)
         cost += sum(side_cost(price(s), Side.SELL, d, cfg) for s in new_s)
         cost += sum(side_cost(price(s), Side.BUY, d, cfg) for s in exit_s)
-        slots = 2 * cfg.k
+        slots = cfg.k if cfg.long_only else 2 * cfg.k
+        bench = sum(ret(s, "next_lr") for s in syms) / len(syms)  # equal-weight universe, close to close
         rows.append(
             {
                 "date": d,
+                "bench": bench,
                 "gross": pnl / slots,
                 "cost": cost / slots,
                 "ret": (pnl - cost) / slots,
@@ -122,6 +129,7 @@ def stats(daily: pl.DataFrame) -> dict[str, float]:
         "cost_bps": f(daily["cost"].mean()) * 1e4,
         "net_bps": m * 1e4,
         "trades_per_day": f(daily["trades"].mean()),
+        "bench_annual": f(daily["bench"].mean()) * 252 if "bench" in daily.columns else 0.0,
     }
 
 
@@ -141,6 +149,8 @@ def main() -> None:
     r.add_argument("--k", type=int, default=10)
     r.add_argument("--exit-k", type=int, nargs="+", default=[10, 20, 30, 50])
     r.add_argument("--notional", type=float, default=500_000.0)
+    r.add_argument("--long-only", action="store_true")
+    r.add_argument("--vehicle", choices=["fut", "delivery"], default="fut")
     r.add_argument("--data", default="data/hf")
     r.add_argument("--offline", action="store_true")
     r.add_argument("--out", default="reports/holding")
@@ -153,7 +163,7 @@ def main() -> None:
     out.mkdir(parents=True, exist_ok=True)
     results = {}
     for ek in a.exit_k:
-        cfg = HoldConfig(k=a.k, exit_k=ek, notional=a.notional)
+        cfg = HoldConfig(k=a.k, exit_k=ek, notional=a.notional, long_only=a.long_only, vehicle=a.vehicle)
         daily = run_book(df, cfg)
         results[ek] = {"config": asdict(cfg), "overall": stats(daily), "yearly": yearly(daily)}
         o = results[ek]["overall"]
@@ -179,7 +189,11 @@ def main() -> None:
             f"| {ek} | {o['annual_return']:+.1%} | {o['sharpe']:.2f} | {o['max_drawdown']:.1%} | "
             f"{o['cost_bps']:.1f} | {o['trades_per_day']:.1f} | {yrs} |"
         )
-    md = f"### Holding book ({Path(a.preds).parent.name})\n\n" + "\n".join(lines) + "\n"
+    first = results[a.exit_k[0]]
+    bench_yrs = " | ".join(f"{y['bench_annual']:+.0%}" for y in first["yearly"] if y["year"] >= 2016)
+    lines.append(f"| market (equal-weight) | {first['overall']['bench_annual']:+.1%} | | | | | {bench_yrs} |")
+    mode = f"{'long-only' if a.long_only else 'long/short'} {a.vehicle}, k={a.k}, Rs {a.notional:,.0f}/position"
+    md = f"### Holding book ({Path(a.preds).parent.name}; {mode})\n\n" + "\n".join(lines) + "\n"
     (out / "report.md").write_text(md)
     if summary := os.environ.get("GITHUB_STEP_SUMMARY"):
         with open(summary, "a") as fh:

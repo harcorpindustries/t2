@@ -20,6 +20,9 @@ on:
       exit_k:
         description: Hold-buffer sizes to score (space separated)
         default: "30 50 80"
+      book:
+        description: Holding-book options, e.g. "--k 10" or "--k 5 --long-only --vehicle delivery --notional 10000"
+        default: "--k 10"
 
 permissions:
   contents: read
@@ -51,7 +54,7 @@ jobs:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: >
           uv run python -m t2.backtest.holding run --offline
-          --preds reports/${{ steps.n.outputs.name }}/preds.parquet --exit-k ${{ inputs.exit_k }}
+          --preds reports/${{ steps.n.outputs.name }}/preds.parquet --exit-k ${{ inputs.exit_k }} ${{ inputs.book }}
           --out reports/${{ steps.n.outputs.name }}/holding
       - uses: actions/upload-artifact@v4
         if: always()
