@@ -51,33 +51,41 @@ TARGETS = ["y1", "y5"]
 
 
 def fetch(dest: Path, fno: bool = False, offline: bool = False) -> Path:
-    """Download the daily equity and delivery tables, plus F&O when needed (cached by the hub client).
+    """Download the yearly compacted equity and delivery tables, plus F&O when needed.
 
-    offline=True uses what is already in `dest` (local reruns: checking 20k files against the hub is slow).
+    offline=True uses what is already in `dest` (local reruns).
     """
     from huggingface_hub import snapshot_download
 
     if offline:
         return dest
-
+    tables = ["eq_daily", "eq_delivery", *(["fo_daily"] if fno else [])]
     snapshot_download(
         DATASET_REPO,
         repo_type="dataset",
         local_dir=dest,
-        allow_patterns=["eq_daily/**", "eq_delivery/**", *(["fo_daily/**"] if fno else [])],
+        allow_patterns=[f"compact/{t}/*" for t in tables],
         token=os.environ.get("HF_TOKEN"),
-        max_workers=16,
+        max_workers=8,
     )
     return dest
 
 
+def table(root: Path, name: str) -> pl.LazyFrame:
+    """Scan a daily table: the yearly compacted copy when present, else the per-day files."""
+    compact = root / "compact" / name
+    if compact.is_dir() and any(compact.glob("*.parquet")):
+        return pl.scan_parquet(compact / "*.parquet")
+    return pl.scan_parquet(root / name / "**" / "*.parquet")
+
+
 def load(root: Path) -> pl.DataFrame:
     eq = (
-        pl.scan_parquet(root / "eq_daily" / "**" / "*.parquet")
+        table(root, "eq_daily")
         .filter(pl.col("series").is_in(SERIES))
         .select("date", "symbol", "open", "high", "low", "close", "prev_close", "volume", "turnover")
     )
-    dl = pl.scan_parquet(root / "eq_delivery" / "**" / "*.parquet").filter(pl.col("series").is_in(SERIES))
+    dl = table(root, "eq_delivery").filter(pl.col("series").is_in(SERIES))
     dl = dl.select("date", "symbol", "deliverable_pct").unique(["date", "symbol"])
     return eq.join(dl, on=["date", "symbol"], how="left").unique(["date", "symbol"]).collect()
 
@@ -88,13 +96,7 @@ def fno_members(root: Path) -> pl.DataFrame:
     Using each day's actual list (not today's) avoids survivorship bias: stocks later dropped from F&O count
     while they were in it, and stocks added later do not leak back into the past.
     """
-    return (
-        pl.scan_parquet(root / "fo_daily" / "**" / "*.parquet")
-        .filter(pl.col("instrument") == "FUTSTK")
-        .select("date", "symbol")
-        .unique()
-        .collect()
-    )
+    return table(root, "fo_daily").filter(pl.col("instrument") == "FUTSTK").select("date", "symbol").unique().collect()
 
 
 def build(raw: pl.DataFrame) -> pl.DataFrame:

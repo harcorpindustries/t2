@@ -193,7 +193,7 @@ def run(args: argparse.Namespace) -> None:
     preds = pl.read_parquet(args.preds)
     root = eod.fetch(Path(args.data), offline=args.offline)
     bars = (
-        pl.scan_parquet(Path(root) / "eq_daily" / "**" / "*.parquet")
+        eod.table(Path(root), "eq_daily")
         .filter(pl.col("series").is_in(eod.SERIES) & (pl.col("date") >= preds["date"].min()))
         .select("date", "symbol", "open", "high", "low", "close", "volume")
         .unique(["date", "symbol"])
