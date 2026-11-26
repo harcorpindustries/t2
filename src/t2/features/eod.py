@@ -50,9 +50,15 @@ FEATURES = [
 TARGETS = ["y1", "y5"]
 
 
-def fetch(dest: Path, fno: bool = False) -> Path:
-    """Download the daily equity and delivery tables, plus F&O when needed (cached by the hub client)."""
+def fetch(dest: Path, fno: bool = False, offline: bool = False) -> Path:
+    """Download the daily equity and delivery tables, plus F&O when needed (cached by the hub client).
+
+    offline=True uses what is already in `dest` (local reruns: checking 20k files against the hub is slow).
+    """
     from huggingface_hub import snapshot_download
+
+    if offline:
+        return dest
 
     snapshot_download(
         DATASET_REPO,

@@ -42,6 +42,7 @@ class PaperBroker:
     margin: dict[str, float] = field(default_factory=lambda: dict(DEFAULT_MARGIN))
     _cash: float = field(init=False)
     _orders: dict[str, Order] = field(init=False, default_factory=dict)
+    _open: dict[str, Order] = field(init=False, default_factory=dict)  # active orders only, in placement order
     _positions: dict[tuple[str, Product], Position] = field(init=False, default_factory=dict)
     _fills: list[Fill] = field(init=False, default_factory=list)
     _recent: deque[datetime] = field(init=False, default_factory=deque)
@@ -60,16 +61,21 @@ class PaperBroker:
             order.status, order.reason = Status.REJECTED, reason
         else:
             self._recent.append(order.created)
+            self._open[order.id] = order
         return order
 
     def cancel(self, order_id: str) -> Order:
         o = self._orders[order_id]
         if o.active:
             o.status = Status.CANCELLED
+        self._open.pop(order_id, None)
         return o
 
     def orders(self) -> list[Order]:
         return list(self._orders.values())
+
+    def open_orders(self) -> list[Order]:
+        return list(self._open.values())
 
     def positions(self) -> list[Position]:
         return [p for p in self._positions.values() if p.qty != 0 or p.realized != 0]
@@ -82,14 +88,17 @@ class PaperBroker:
     def fills(self) -> list[Fill]:
         return list(self._fills)
 
+    def fills_since(self, n: int) -> list[Fill]:
+        return self._fills[n:]
+
     def on_bar(self, contract_key: str, bar: Bar) -> list[Fill]:
         self._last[contract_key] = bar.close
         left = int(bar.volume * self.participation)
         out: list[Fill] = []
-        for o in self._orders.values():
+        for o in list(self._open.values()):
             if left <= 0:
                 break
-            if not o.active or o.contract.key != contract_key or o.created >= bar.ts:
+            if o.contract.key != contract_key or o.created >= bar.ts:
                 continue
             price = _fill_price(o, bar)
             if price is None:
@@ -122,9 +131,9 @@ class PaperBroker:
 
     def square_off(self, ts: datetime, products: tuple[Product, ...] = (Product.INTRADAY,)) -> list[Fill]:
         """Close positions at the last price (broker auto square-off). Cancels their open orders first."""
-        for o in self._orders.values():
-            if o.active and o.product in products:
-                o.status = Status.CANCELLED
+        for o in list(self._open.values()):
+            if o.product in products:
+                self.cancel(o.id)
         out = []
         for p in list(self._positions.values()):
             if p.qty == 0 or p.product not in products:
@@ -213,6 +222,8 @@ class PaperBroker:
         o.avg_price = (o.avg_price * o.filled + price * qty) / (o.filled + qty)
         o.filled += qty
         o.status = Status.FILLED if o.remaining == 0 else Status.PARTIAL
+        if o.status == Status.FILLED:
+            self._open.pop(o.id, None)
         f = Fill(o.id, c, o.side, o.product, qty, price, ts, ch)
         p.fills.append(f)
         self._fills.append(f)

@@ -203,7 +203,7 @@ def run(args: argparse.Namespace) -> None:
         train_universe=args.train_universe,
     )
     fno = "fno" in (cfg.universe, cfg.train_universe)
-    root = eod.fetch(Path(args.data), fno=fno)
+    root = eod.fetch(Path(args.data), fno=fno, offline=args.offline)
     t0 = time.time()
     full = eod.build(eod.load(root))
     members = eod.fno_members(root) if fno else None
@@ -224,6 +224,7 @@ def run(args: argparse.Namespace) -> None:
     )
     report = {"config": asdict(cfg), "params": PARAMS, "data_last_date": str(last), "folds": folds, "overall": overall}
     (out / "report.json").write_text(json.dumps(report, indent=2, default=str))
+    preds.select("date", "symbol", "score").write_parquet(out / "preds.parquet")  # input for the sandbox replay
     md = summary_md(folds, overall, cfg)
     (out / "report.md").write_text(md)
     if summary := os.environ.get("GITHUB_STEP_SUMMARY"):
@@ -250,6 +251,7 @@ def main() -> None:
     r.add_argument("--universe", choices=["all", "fno"], default="all")
     r.add_argument("--train-universe", choices=["all", "fno"], default="all")
     r.add_argument("--data", default="data/hf")
+    r.add_argument("--offline", action="store_true", help="use data already in --data, skip the hub")
     r.add_argument("--out", default="reports/baseline")
     args = p.parse_args()
     run(args)
