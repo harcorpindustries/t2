@@ -35,11 +35,19 @@ export function Nav() {
           </Link>
         );
       })}
-      <button type="button" onClick={signOut}
-        className="flex h-11 items-center gap-3 rounded-md px-4 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground">
-        <LogOut className="size-4" />
-        Sign out
-      </button>
     </nav>
+  );
+}
+
+/** Red, at the bottom of the sidebar. Hidden on the sign-in and Breeze callback pages. */
+export function SignOut() {
+  const path = usePathname();
+  if (path.startsWith("/login") || path.startsWith("/breeze")) return null;
+  return (
+    <button type="button" onClick={signOut}
+      className="flex h-11 w-full items-center gap-3 rounded-md px-4 text-sm font-medium text-down hover:bg-down/15">
+      <LogOut className="size-4" />
+      Sign out
+    </button>
   );
 }
