@@ -4,6 +4,7 @@ import { type Book, rupees, signedRupees, useApi, when } from "@/lib/api";
 import { Card, ErrorNote, PageTitle, Stat, Table, tone } from "@/components/ui";
 import { EquityChart } from "@/components/equity-chart";
 import { KillSwitch } from "@/components/kill-switch";
+import { BreezeLogin } from "@/components/breeze-login";
 
 export default function Overview() {
   const { data, error, reload } = useApi<Book>("/api/book");
@@ -24,7 +25,10 @@ export default function Overview() {
       </div>
       <div className="grid gap-5 xl:grid-cols-3">
         <Card title="Equity" className="xl:col-span-2"><EquityChart points={marked} /></Card>
-        <Card title="Kill switch"><KillSwitch kill={data?.kill} onChange={reload} /></Card>
+        <div className="grid gap-5">
+          <Card title="Breeze"><BreezeLogin /></Card>
+          <Card title="Kill switch"><KillSwitch kill={data?.kill} onChange={reload} /></Card>
+        </div>
         <Card title="Last session" className="xl:col-span-3">
           <Table head={["Day", "Signals from", "Trades", "Charges", "Blocked", "Open P&L"]}
             rows={last ? [[last.day, last.signal_date, last.trades, rupees(last.charges), last.blocked, signedRupees(last.open_pnl)]] : []}

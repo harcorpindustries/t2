@@ -103,3 +103,33 @@ def test_static_fallback_and_no_path_escape(client, tmp_path):
     (tmp_path / "static" / "index.html").write_text("<html>ok</html>")
     assert client.get("/").text == "<html>ok</html>"
     assert client.get("/../paper.db").text == "<html>ok</html>"
+
+
+def test_breeze_login_flow(client, tmp_path, monkeypatch):
+    from t2.dashboard import breeze_session as bs
+
+    env = tmp_path / ".env"
+    env.write_text("BREEZE_API_KEY=k+y/1\nBREEZE_API_SECRET=s\nOTHER=1\n")
+    monkeypatch.setattr(bs, "ENV_FILE", env)
+    assert client.get("/api/breeze/login-url").json()["url"].endswith("api_key=k%2By%2F1")
+    assert client.get("/api/breeze/status").json()["valid_today"] is False
+
+    monkeypatch.setattr(bs, "check_with_breeze", lambda s, path=None: (False, "rejected"))
+    assert client.post("/api/breeze/session", json={"apisession": "1234"}).status_code == 422
+    assert "BREEZE_SESSION_TOKEN" not in env.read_text()  # a rejected session is never saved
+
+    monkeypatch.setattr(bs, "check_with_breeze", lambda s, path=None: (True, "ok"))
+    r = client.post("/api/breeze/session", json={"apisession": "12345678"})
+    assert r.status_code == 200 and r.json()["valid_today"] is True
+    text = env.read_text()
+    assert "BREEZE_SESSION_TOKEN=12345678" in text and "OTHER=1" in text and "BREEZE_API_KEY=k+y/1" in text
+    assert (env.stat().st_mode & 0o777) == 0o600
+
+
+def test_breeze_session_needs_dashboard_login(client):
+    anon = TestClient(api.app, base_url="https://testserver", follow_redirects=False)
+    assert anon.post("/api/breeze/session", json={"apisession": "12345678"}).status_code == 401
+    assert anon.get("/api/breeze/login-url").status_code == 401
+    # the callback form post is public but only redirects to the page, saving nothing
+    r = anon.post("/breeze/callback", data={"apisession": "1234<script>"})
+    assert r.status_code == 303 and r.headers["location"] == "/breeze/callback?apisession=1234script"

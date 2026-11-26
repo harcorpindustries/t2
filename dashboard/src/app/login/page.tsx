@@ -20,7 +20,9 @@ export default function LoginPage() {
     });
     setBusy(false);
     if (r.ok) {
-      window.location.href = "/";
+      // Only known pages: never a URL taken from the query string (no open redirect).
+      const next = new URLSearchParams(window.location.search).get("next");
+      window.location.href = next === "breeze" ? "/breeze/callback" : "/";
       return;
     }
     const body = await r.json().catch(() => ({}));

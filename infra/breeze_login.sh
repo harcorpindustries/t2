@@ -27,8 +27,8 @@ session=$(printf '%s' "$pasted" | grep -oE 'apisession=[A-Za-z0-9]+' | cut -d= -
 
 printf '%s' "$session" | ssh -i "$key" "$host" '
   set -e; v=$(cat); f=/opt/t2/.env
-  grep -v "^BREEZE_SESSION_TOKEN=" $f > $f.tmp || true
-  printf "BREEZE_SESSION_TOKEN=%s\n" "$v" >> $f.tmp
+  grep -v -e "^BREEZE_SESSION_TOKEN=" -e "^BREEZE_SESSION_SAVED_AT=" $f > $f.tmp || true
+  printf "BREEZE_SESSION_TOKEN=%s\nBREEZE_SESSION_SAVED_AT=%s\n" "$v" "$(TZ=Asia/Kolkata date +%Y-%m-%dT%H:%M:%S+05:30)" >> $f.tmp
   mv $f.tmp $f; chmod 600 $f
   cd /opt/t2/app
   out=$(/usr/local/bin/uv run --frozen python -m t2.brokers.breeze_check 2>&1 || true)

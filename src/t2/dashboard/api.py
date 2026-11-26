@@ -25,13 +25,16 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from t2.dashboard import auth
+from t2.dashboard import breeze_session as bs
 
 DATA = Path(os.environ.get("T2_PAPER_DIR", "/opt/t2/data"))
 NEWS_DB = Path(os.environ.get("T2_NEWS_DB", "/opt/t2/data/news.db"))
 STATIC = Path(os.environ.get("T2_DASHBOARD_DIR", "/opt/t2/dashboard"))
 
 app = FastAPI(title="t2 dashboard", docs_url=None, redoc_url=None, openapi_url=None)
-PUBLIC = {"/login", "/login.html", "/api/login", "/favicon.ico"}
+# /breeze/callback is where ICICI sends the browser after login; the page itself saves nothing (the save is an
+# authenticated API call made from it), so it can load before the dashboard session is checked.
+PUBLIC = {"/login", "/login.html", "/api/login", "/favicon.ico", "/breeze/callback", "/breeze/callback.html"}
 PUBLIC_PREFIX = "/_next/"  # the UI's static assets (no data in them)
 
 
@@ -145,6 +148,54 @@ def book() -> dict:
         "events": rows(paper_db(), "select * from events order by ts desc limit 100"),
         "kill": kill_state(),
     }
+
+
+# ----- daily Breeze login -----
+@app.get("/api/breeze/status")
+def breeze_status() -> dict:
+    return bs.status()
+
+
+@app.get("/api/breeze/login-url")
+def breeze_login_url() -> dict:
+    try:
+        return {"url": bs.login_url()}
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+class SessionRequest(BaseModel):
+    apisession: str
+
+
+@app.post("/api/breeze/session")
+def breeze_session(req: SessionRequest) -> dict:
+    """Signed-in users only (require_login): confirm the session with Breeze, then save it for every server job."""
+    session = bs.clean(req.apisession)
+    if len(session) < 4:
+        raise HTTPException(status_code=400, detail="no session number")
+    ok, msg = bs.check_with_breeze(session)
+    if not ok:
+        raise HTTPException(status_code=422, detail=msg)
+    bs.save(session)
+    _record_event("breeze_login", "session saved from the dashboard")
+    return bs.status() | {"ok": True}
+
+
+@app.post("/breeze/callback", include_in_schema=False)
+async def breeze_callback_post(request: Request) -> Response:
+    """If ICICI posts the session as a form, turn it into the GET the callback page reads. Saves nothing."""
+    form = await request.form()
+    session = bs.clean(str(form.get("apisession") or form.get("API_Session") or ""))
+    return RedirectResponse(f"/breeze/callback?apisession={session}", status_code=303)
+
+
+def _record_event(kind: str, detail: str) -> None:
+    con = sqlite3.connect(paper_db())
+    con.execute("create table if not exists events (ts text, kind text, detail text)")
+    con.execute("insert into events values (?,?,?)", (datetime.now(UTC).isoformat(), kind, detail))
+    con.commit()
+    con.close()
 
 
 # ----- kill switch -----
