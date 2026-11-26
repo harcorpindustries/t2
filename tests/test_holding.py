@@ -46,3 +46,13 @@ def test_rebalance_keeps_inside_buffer_and_refills():
     keep_l, keep_s, new_l, new_s = rebalance({"S3", "S12"}, {"S18", "S5"}, ranked, k=2, exit_k=4)
     assert keep_l == {"S3"} and keep_s == {"S18"}  # S12 / S5 fell outside the buffer
     assert new_l == ["S0"] and new_s == ["S19"]
+
+
+def test_long_only_delivery_book_has_no_shorts_and_costs_more():
+    f = frame(oracle=5.0)
+    fut = stats(run_book(f, HoldConfig(k=5, exit_k=5)))
+    lo = run_book(f, HoldConfig(k=5, exit_k=5, long_only=True, vehicle="delivery", notional=10_000))
+    s = stats(lo)
+    assert s["trades_per_day"] < fut["trades_per_day"]  # one side only
+    assert s["cost_bps"] > fut["cost_bps"]  # delivery STT both sides + flat brokerage on a small ticket
+    assert "bench_annual" in s
