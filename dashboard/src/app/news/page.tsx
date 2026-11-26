@@ -23,11 +23,12 @@ const SOURCE: Record<string, string> = {
   news: "Press", aggregator: "Google News", exchange: "NSE filing", regulator: "Regulator",
 };
 
+/** Feed summaries are untrusted HTML: parse them in an inert document (no scripts, no event handlers, no
+ *  image loads) and keep only the text. Never assign them to innerHTML of the live page. */
 function stripHtml(s: string | null): string {
   if (!s) return "";
-  const div = document.createElement("div");
-  div.innerHTML = s;
-  return (div.textContent ?? "").trim();
+  const doc = new DOMParser().parseFromString(s, "text/html");
+  return (doc.body.textContent ?? "").trim();
 }
 
 function Reader({ id }: { id: string }) {
