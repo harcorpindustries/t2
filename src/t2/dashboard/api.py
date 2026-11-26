@@ -141,9 +141,9 @@ def signals() -> dict:
 def _model() -> dict:
     from huggingface_hub import hf_hub_download
 
-    from t2.models.champion import MODEL_REPO
-
-    p = hf_hub_download(MODEL_REPO, "champion/meta.json", token=os.environ.get("HF_TOKEN"))
+    # the repo name only: importing the model code would pull in the ML libraries the server does not need
+    repo = os.environ.get("HF_MODEL_REPO", "harcorp/t2-models")
+    p = hf_hub_download(repo, "champion/meta.json", token=os.environ.get("HF_TOKEN"))
     return json.loads(Path(p).read_text())
 
 
