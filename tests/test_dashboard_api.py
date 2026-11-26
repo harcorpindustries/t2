@@ -1,9 +1,12 @@
 import sqlite3
+from datetime import date
 
+import polars as pl
 import pytest
 from fastapi.testclient import TestClient
 
 from t2.dashboard import api, auth
+from t2.trader import paper_live
 
 PASSWORD = "correct horse battery"
 
@@ -17,15 +20,50 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setenv("DASHBOARD_PASSWORD_HASH", auth.hash_password(PASSWORD))
     monkeypatch.setenv("DASHBOARD_SESSION_KEY", "k" * 40)
     auth._failures.clear()
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
     con = sqlite3.connect(tmp_path / "paper.db")
+    con.executescript(paper_live.SCHEMA)
     con.executescript(
-        """create table days (day text, equity real, gross real);
-        insert into days values ('2026-11-27', 3000000, 1e7), ('2026-11-30', 3010000, 1e7);
-        create table positions (symbol text, qty integer); insert into positions values ('TCS', 225);
-        create table trades (ts text); create table events (ts text, kind text, detail text);
-        create table account (k text, v real); insert into account values ('cash', 2990000);"""
+        """insert into days (day, signal_date, equity, gross, charges, trades, blocked) values
+          ('2026-11-27', '2026-11-26', 50500, 32000, 60, 2, 0), ('2026-11-30', '2026-11-27', 50200, 32000, 0, 0, 0);
+        insert into positions values ('TCS', 5, 3200, 1, null, '2026-11-27');
+        insert into trades (ts, day, symbol, side, qty, price, charges, reason, signal_date) values
+          ('2026-11-27T09:20:00', '2026-11-27', 'TCS', 'buy', 5, 3200, 20, 'enter', '2026-11-26'),
+          ('2026-11-27T09:20:01', '2026-11-27', 'INFY', 'buy', 10, 1500, 20, 'enter', '2026-11-26'),
+          ('2026-11-30T09:20:00', '2026-11-30', 'INFY', 'sell', 10, 1560, 20, 'exit', '2026-11-27');
+        insert into account values ('cash', 18000);"""
     )
     con.commit()
+    px = pl.DataFrame(
+        {
+            "date": [date(2026, 11, 26), date(2026, 11, 27), date(2026, 11, 30)] * 2,
+            "symbol": ["TCS"] * 3 + ["INFY"] * 3,
+            "open": [3190.0, 3200, 3240, 1490, 1500, 1550],
+            "high": [3210.0, 3260, 3270, 1510, 1560, 1570],
+            "low": [3180.0, 3190, 3230, 1480, 1495, 1540],
+            "close": [3200.0, 3250, 3260, 1500, 1550, 1560],
+            "prev_close": [3180.0, 3200, 3250, 1490, 1500, 1550],
+            "volume": [1e6] * 6,
+            "turnover": [1e9] * 6,
+        }
+    )
+    hist = pl.DataFrame(
+        {
+            "date": [date(2026, 11, 26)] * 2 + [date(2026, 11, 27)] * 2,
+            "symbol": ["TCS", "INFY", "INFY", "TCS"],
+            "rank": [1, 2, 1, 2],
+            "score": [0.5, 0.1, 0.4, 0.2],
+            "close": [3200.0, 1500, 1550, 3250],
+        }
+    )
+    monkeypatch.setattr(api, "prices", lambda: px)
+    monkeypatch.setattr(api, "signal_history", lambda: hist)
+    monkeypatch.setattr(api, "sectors", lambda: {"TCS": "Information Technology"})
+    monkeypatch.setattr(
+        api,
+        "book_cfg",
+        lambda: {"capital": 50000, "k": 3, "exit_k": 200, "vehicle": "delivery", "risk": {"max_open_positions": 4}},
+    )
     news = sqlite3.connect(tmp_path / "news.db")
     news.executescript(
         """create table items (id text, source text, category text, url text, title text, summary text,
@@ -49,8 +87,68 @@ def client(tmp_path, monkeypatch):
 
 def test_book(client):
     b = client.get("/api/book").json()
-    assert b["equity"] == 3010000 and b["day_pnl"] == 10000 and b["total_pnl"] == 10000
-    assert b["positions"][0]["symbol"] == "TCS" and b["kill"] == {"on": False}
+    assert b["equity"] == 50200 and b["day_pnl"] == -300 and b["total_pnl"] == 200
+    assert b["kill"] == {"on": False, "flatten": False}
+    tcs = b["positions"][0]
+    assert tcs["symbol"] == "TCS" and tcs["last"] == 3260 and tcs["pnl"] == 300 and tcs["rank"] == 2
+    assert tcs["sector"] == "Information Technology"
+    (trip,) = b["round_trips"]
+    assert trip["symbol"] == "INFY" and trip["pnl"] == 600 - 40  # after both legs' charges
+    assert b["trade_stats"]["win_rate"] == 1.0
+    assert b["stats"]["total_return"] == 50200 / 50000 - 1
+    assert set(b["trades"][0]["breakdown"]) >= {"stt", "brokerage", "gst", "stamp", "total"}
+
+
+def test_signals_with_rank_change(client, monkeypatch):
+    from t2.data import hf_store
+
+    monkeypatch.setattr(hf_store, "download", lambda path, dest: None)
+    api._cache.clear()
+    s = client.get("/api/signals").json()
+    assert s["date"] == "2026-11-27" and s["prev_date"] == "2026-11-26"
+    assert {r["symbol"]: r["prev_rank"] for r in s["rows"]} == {"INFY": 2, "TCS": 1}
+    assert client.get("/api/signals", params={"date": "2026-11-26"}).json()["rows"][0]["prev_rank"] is None
+
+
+def test_stock_risk_and_flatten(client, tmp_path):
+    st = client.get("/api/stock/tcs").json()
+    assert st["symbol"] == "TCS" and len(st["candles"]) == 3 and st["position"]["qty"] == 5
+    assert [x["rank"] for x in st["scores"]] == [1, 2] and st["news"][0]["id"] == "a1"
+    assert client.get("/api/stock/..%2Fx").status_code in (400, 404)
+    r = client.get("/api/risk").json()
+    assert r["usage"]["open_positions"] == 1 and r["usage"]["exposure"] == 5 * 3260
+    assert client.post("/api/flatten", json={"on": True}).json() == {"flatten": True}
+    assert (tmp_path / "FLATTEN").exists() and client.get("/api/book").json()["kill"]["flatten"]
+    client.post("/api/flatten", json={"on": False})
+    assert not (tmp_path / "FLATTEN").exists()
+
+
+def test_ping(client):
+    p = client.get("/api/ping").json()
+    assert p["kill"]["on"] is False and "valid_today" in p["breeze"]
+
+
+def test_logs_reject_other_units(client):
+    assert client.get("/api/logs/sshd").status_code == 400
+    assert client.get("/api/logs/t2-paper-open").status_code == 200
+
+
+def test_revoke_sessions_signs_out_other_browsers(client, tmp_path, monkeypatch):
+    from t2.dashboard import breeze_session as bs
+
+    monkeypatch.setattr(bs, "ENV_FILE", tmp_path / ".env")
+    other = TestClient(api.app, base_url="https://testserver")
+    assert other.post("/api/login", json={"password": PASSWORD}).status_code == 200
+    assert client.post("/api/sessions/revoke").status_code == 200
+    assert other.get("/api/book").status_code == 401
+    assert client.get("/api/book").status_code == 200
+    assert "DASHBOARD_SESSION_KEY=" in (tmp_path / ".env").read_text()
+
+
+def test_news_for_holdings_and_tone(client):
+    items = client.get("/api/news", params={"symbols": "INFY,XYZ", "group": "all"}).json()["items"]
+    assert [i["id"] for i in items] == ["a1"]
+    assert client.get("/api/news-tone").status_code == 200
 
 
 def test_kill_switch_needs_login_or_token(client, tmp_path):
@@ -62,6 +160,7 @@ def test_kill_switch_needs_login_or_token(client, tmp_path):
     assert not (tmp_path / "KILL").exists()
     kinds = [e["kind"] for e in client.get("/api/book").json()["events"]]
     assert set(kinds) == {"kill_on", "kill_off"}
+    assert client.get("/api/risk").json()["blocked"][0]["kind"] == "kill_off"
 
 
 def test_news_search(client):

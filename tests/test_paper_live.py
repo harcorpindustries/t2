@@ -161,3 +161,25 @@ def test_delivery_book_never_spends_more_than_cash(tmp_path, monkeypatch):
     c = BookConfig(**{**c.__dict__, "capital": 15_000})
     r = run_open(connect(tmp_path / "paper.db"), c, quotes({}), NOW)
     assert r["filled"] == 1 and r["blocked"] == 2
+
+
+def test_flatten_sells_everything_and_clears(tmp_path, monkeypatch):
+    monkeypatch.setattr(pl_live, "DATA", tmp_path)
+    monkeypatch.setattr(pl_live, "latest_signals", lambda today, folder="signals": signals(list("ABCDEFGH")))
+    con = connect(tmp_path / "paper.db")
+    run_open(con, cfg(), quotes({}), NOW)
+    assert len(positions(con)) == 4
+    (tmp_path / "FLATTEN").touch()
+    (tmp_path / "KILL").touch()  # exits still pass with the kill switch on
+    nxt = datetime(2026, 12, 2, 9, 20)
+    r = run_open(con, cfg(), quotes({}, nxt), nxt)
+    assert r["filled"] == 4 and positions(con) == {} and not (tmp_path / "FLATTEN").exists()
+
+
+def test_alert_summaries():
+    from t2 import alerts
+
+    assert "skipped" in alerts.open_summary({"skipped": "market closed"})
+    assert "2 filled" in alerts.open_summary({"filled": 2, "blocked": 0, "charges": 40.0, "signal_date": "x"})
+    assert "day -Rs 300" in alerts.close_summary({"equity": 49700.0, "positions": 3}, 50000.0)
+    assert alerts.send("x") is False  # not configured: never raises, never sends
