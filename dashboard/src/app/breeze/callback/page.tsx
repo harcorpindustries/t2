@@ -46,8 +46,8 @@ export default function BreezeCallback() {
       <div className="w-full max-w-md rounded-2xl bg-card p-8 ring-1 ring-foreground/10">
         <div className="mb-4 flex items-center gap-3">
           {state === "working" && <Loader2 className="size-5 animate-spin" />}
-          {state === "ok" && <CheckCircle2 className="size-5 text-positive" />}
-          {state === "error" && <XCircle className="size-5 text-destructive" />}
+          {state === "ok" && <CheckCircle2 className="size-5 text-good" />}
+          {state === "error" && <XCircle className="size-5 text-down" />}
           <h1 className="text-lg font-semibold">Breeze login</h1>
         </div>
         <p className="mb-6 text-sm text-muted-foreground">{msg}</p>

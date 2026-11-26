@@ -1,5 +1,6 @@
 "use client";
 
+import { CheckCircle2, XCircle } from "lucide-react";
 import { useApi, when } from "@/lib/api";
 import { Badge, Card, ErrorNote, PageTitle, Stat, Table } from "@/components/ui";
 
@@ -28,7 +29,8 @@ export default function SystemPage() {
         <Card title="Scheduled jobs">
           <Table head={["Job", "Last run", "Next run", "Result"]} rows={(data?.timers ?? []).map((t) => [
             t.unit.replace("t2-", ""), usTime(t.last_us), usTime(t.next_us),
-            t.result === "success" ? <Badge key="r" kind="ok">ok</Badge> : t.result ? <Badge key="r" kind="danger">{t.result}</Badge> : "–",
+            t.result === "success" ? <Badge key="r" kind="ok"><CheckCircle2 className="size-3.5" />ok</Badge>
+              : t.result ? <Badge key="r" kind="danger"><XCircle className="size-3.5" />{t.result}</Badge> : "–",
           ])} />
         </Card>
         <Card title="Breeze intraday backfill">

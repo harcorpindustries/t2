@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Power } from "lucide-react";
+import { CheckCircle2, OctagonX, Power } from "lucide-react";
 import type { Kill } from "@/lib/api";
 import { when } from "@/lib/api";
 import { Badge, Button, Input } from "@/components/ui";
@@ -30,7 +30,9 @@ export function KillSwitch({ kill, onChange }: { kill: Kill | undefined; onChang
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        {on ? <Badge kind="danger">Kill switch ON</Badge> : <Badge kind="ok">Trading allowed</Badge>}
+        {on
+          ? <Badge kind="danger"><OctagonX className="size-3.5" />Kill switch ON</Badge>
+          : <Badge kind="ok"><CheckCircle2 className="size-3.5" />Trading allowed</Badge>}
         {on && <span className="text-sm text-muted-foreground">since {when(kill?.since)} · {kill?.reason}</span>}
       </div>
       <div className="flex flex-wrap gap-3">

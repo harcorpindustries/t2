@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { LogIn } from "lucide-react";
+import { AlertTriangle, CheckCircle2, LogIn } from "lucide-react";
 import { useApi, when } from "@/lib/api";
 import { Badge, Button } from "@/components/ui";
 
@@ -28,7 +28,9 @@ export function BreezeLogin() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
-        {data?.valid_today ? <Badge kind="ok">Connected today</Badge> : <Badge kind="danger">Login needed today</Badge>}
+        {data?.valid_today
+          ? <Badge kind="ok"><CheckCircle2 className="size-3.5" />Connected today</Badge>
+          : <Badge kind="warn"><AlertTriangle className="size-3.5" />Login needed today</Badge>}
         {data?.saved_at && <span className="text-sm text-muted-foreground">last login {when(data.saved_at)}</span>}
       </div>
       <p className="text-sm text-muted-foreground">

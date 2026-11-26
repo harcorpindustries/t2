@@ -33,7 +33,7 @@ export function Stat({ label, value, tone }: { label: string; value: ReactNode; 
     <div className="min-w-36">
       <div className="text-xs font-medium text-muted-foreground">{label}</div>
       <div className={cn("mt-1 text-2xl font-semibold tabular-nums",
-        tone === "pos" && "text-positive", tone === "neg" && "text-destructive")}>{value}</div>
+        tone === "pos" && "text-up", tone === "neg" && "text-down")}>{value}</div>
     </div>
   );
 }
@@ -43,12 +43,19 @@ export function tone(v: number | null | undefined): "pos" | "neg" | undefined {
   return v > 0 ? "pos" : "neg";
 }
 
-export function Badge({ children, kind = "muted" }: { children: ReactNode; kind?: "muted" | "danger" | "ok" }) {
+export type BadgeKind = "muted" | "danger" | "ok" | "up" | "down" | "brand" | "warn";
+
+/** Colored chips. Status kinds (ok/danger/warn) should carry an icon or a word, never color alone. */
+export function Badge({ children, kind = "muted" }: { children: ReactNode; kind?: BadgeKind }) {
   return (
-    <span className={cn("inline-flex h-7 items-center rounded-full px-3 text-xs font-medium",
+    <span className={cn("inline-flex h-7 items-center gap-1.5 rounded-full px-3 text-xs font-medium",
       kind === "muted" && "bg-muted text-muted-foreground",
-      kind === "danger" && "bg-destructive/10 text-destructive",
-      kind === "ok" && "bg-positive/10 text-positive")}>{children}</span>
+      kind === "danger" && "bg-down/15 text-down",
+      kind === "ok" && "bg-good/15 text-good",
+      kind === "warn" && "bg-warn/15 text-warn",
+      kind === "up" && "bg-up/15 text-up",
+      kind === "down" && "bg-down/15 text-down",
+      kind === "brand" && "bg-brand/15 text-brand")}>{children}</span>
   );
 }
 
@@ -61,10 +68,10 @@ export function Button({ children, onClick, variant = "primary", disabled, type 
       className={cn("inline-flex h-11 items-center justify-center gap-2 rounded-full px-5 text-sm font-medium",
         "transition-colors focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
         "disabled:pointer-events-none disabled:opacity-50",
-        variant === "primary" && "bg-primary text-primary-foreground hover:bg-primary/80",
+        variant === "primary" && "bg-brand text-brand-foreground hover:bg-brand/80",
         variant === "outline" && "border border-border bg-background hover:bg-muted",
         variant === "ghost" && "hover:bg-muted",
-        variant === "danger" && "bg-destructive/10 text-destructive hover:bg-destructive/20")}>
+        variant === "danger" && "bg-down/15 text-down hover:bg-down/25")}>
       {children}
     </button>
   );
@@ -103,5 +110,5 @@ export function Table({ head, rows, empty = "Nothing yet" }: {
 
 export function ErrorNote({ error }: { error: string | null }) {
   if (!error) return null;
-  return <p className="mb-6 rounded-lg bg-destructive/10 px-4 py-3 text-sm text-destructive">Could not load: {error}</p>;
+  return <p className="mb-6 rounded-lg bg-down/15 px-4 py-3 text-sm text-down">Could not load: {error}</p>;
 }

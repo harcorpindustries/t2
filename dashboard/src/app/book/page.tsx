@@ -1,5 +1,6 @@
 "use client";
 
+import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import { type Book, num, rupees, signedRupees, useApi, when } from "@/lib/api";
 import { Badge, Card, ErrorNote, PageTitle, Table } from "@/components/ui";
 
@@ -14,7 +15,8 @@ export default function BookPage() {
           <Table head={["Symbol", "Side", "Qty", "Lots", "Avg price", "Expiry", "Since"]}
             rows={(data?.positions ?? []).map((p) => [
               <span key="s" className="font-medium">{p.symbol}</span>,
-              p.qty > 0 ? <Badge key="b" kind="ok">Long</Badge> : <Badge key="b" kind="danger">Short</Badge>,
+              p.qty > 0 ? <Badge key="b" kind="up"><ArrowUpRight className="size-3.5" />Long</Badge>
+                : <Badge key="b" kind="down"><ArrowDownRight className="size-3.5" />Short</Badge>,
               num(Math.abs(p.qty), 0), num(Math.abs(p.qty) / (p.lot_size || 1), 0), rupees(p.avg_price), p.expiry, p.opened,
             ])} empty="No open positions." />
         </Card>

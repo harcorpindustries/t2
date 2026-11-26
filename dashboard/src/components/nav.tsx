@@ -29,7 +29,7 @@ export function Nav() {
         return (
           <Link key={href} href={href}
             className={cn("flex h-11 items-center gap-3 rounded-full px-4 text-sm font-medium transition-colors",
-              active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>
+              active ? "bg-brand/15 text-brand" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>
             <Icon className="size-4" />
             {label}
           </Link>
