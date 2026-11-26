@@ -46,7 +46,7 @@ def test_learns_a_planted_signal():
 
 
 def test_resume_continues_exactly():
-    p = synthetic(n_sym=60, n_days=200)  # training uses days with 50+ stocks
+    p = synthetic(n_sym=60, n_days=400)  # spans two years; training uses days with 50+ stocks
     cube = seqdata.build(p, ["f0", "f1"], "y5", date(2018, 1, 1), date(2019, 12, 31))
     days = seqdata.split_days(cube, cube.dates[-1].year, date(2018, 1, 1), embargo=10, valid_days=20)
     seqdata.scale(cube, days["train"])
