@@ -37,3 +37,12 @@ def test_book_never_holds_more_than_k_per_side():
     assert (
         daily["trades"].to_list() and max(daily["trades"].to_list()) <= 4 * 4
     )  # at most full turnover: 4 exits + 4 entries per side
+
+
+def test_rebalance_keeps_inside_buffer_and_refills():
+    from t2.backtest.holding import rebalance
+
+    ranked = [f"S{i}" for i in range(20)]  # S0 best ... S19 worst
+    keep_l, keep_s, new_l, new_s = rebalance({"S3", "S12"}, {"S18", "S5"}, ranked, k=2, exit_k=4)
+    assert keep_l == {"S3"} and keep_s == {"S18"}  # S12 / S5 fell outside the buffer
+    assert new_l == ["S0"] and new_s == ["S19"]

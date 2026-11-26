@@ -44,6 +44,23 @@ def side_cost(price: float, side: Side, d: date, cfg: HoldConfig) -> float:
     return ch / (qty * price) + cfg.slippage_bps / 1e4
 
 
+def rebalance(
+    longs: set[str], shorts: set[str], ranked: list[str], k: int, exit_k: int
+) -> tuple[set[str], set[str], list[str], list[str]]:
+    """The book's one rule, shared by the backtest and the live trader.
+
+    `ranked` is best-first. A held long stays while inside the top `exit_k`, a held short while inside the bottom
+    `exit_k`; free slots are filled from the top / bottom. Returns (keep_long, keep_short, new_long, new_short).
+    """
+    rank = {s: i for i, s in enumerate(ranked)}
+    n = len(ranked)
+    keep_l = {s for s in longs if s in rank and rank[s] < exit_k}
+    keep_s = {s for s in shorts if s in rank and rank[s] >= n - exit_k}
+    new_l = [s for s in ranked if s not in keep_l and s not in keep_s][: k - len(keep_l)]
+    new_s = [s for s in reversed(ranked) if s not in keep_s and s not in keep_l and s not in new_l]
+    return keep_l, keep_s, new_l, new_s[: k - len(keep_s)]
+
+
 def run_book(df: pl.DataFrame, cfg: HoldConfig) -> pl.DataFrame:
     """df: date, symbol, close, score, y1, next_gap, next_lr. One output row per decision date t (P&L on t+1)."""
     longs: set[str] = set()
@@ -54,15 +71,9 @@ def run_book(df: pl.DataFrame, cfg: HoldConfig) -> pl.DataFrame:
         if day.height < cfg.min_hold_names:
             continue
         syms = day["symbol"].to_list()
-        rank = {s: i for i, s in enumerate(syms)}
-        n = len(syms)
         info = {r["symbol"]: r for r in day.iter_rows(named=True)}
 
-        keep_l = {s for s in longs if s in rank and rank[s] < cfg.exit_k}
-        keep_s = {s for s in shorts if s in rank and rank[s] >= n - cfg.exit_k}
-        new_l = [s for s in syms if s not in keep_l and s not in keep_s][: cfg.k - len(keep_l)]
-        new_s = [s for s in reversed(syms) if s not in keep_s and s not in keep_l and s not in new_l]
-        new_s = new_s[: cfg.k - len(keep_s)]
+        keep_l, keep_s, new_l, new_s = rebalance(longs, shorts, syms, cfg.k, cfg.exit_k)
         exit_l, exit_s = longs - keep_l, shorts - keep_s
 
         def ret(s: str, col: str, info: dict = info) -> float:

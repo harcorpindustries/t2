@@ -1,0 +1,26 @@
+name: signals
+
+on:
+  schedule:
+    - cron: "15 2 * * 1-5"  # 07:45 IST, after the night's NSE and GDELT updates, before the 09:15 open
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: champion
+  cancel-in-progress: false
+
+jobs:
+  score:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen
+      - name: Score every F&O stock with the champion
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: uv run python -m t2.models.champion signals
