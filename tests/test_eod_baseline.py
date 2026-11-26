@@ -87,3 +87,11 @@ def test_evaluate_perfect_foresight_is_profitable():
     p = panel.filter(pl.col("y1").is_not_null()).with_columns(pl.col("y1").alias("score"))
     m = evaluate(p, Config(top_k=5))
     assert m["ic_mean"] > 0.99 and m["long_net_bps"] > m["bench_bps"]
+
+
+def test_trade_universe_subset_trains_on_wider_panel():
+    panel = eod.build(synthetic(n_sym=40, n_days=700))
+    subset = panel.filter(pl.col("symbol").is_in([f"S{i:02d}" for i in range(15)]))
+    folds, preds = walk_forward(subset, [2020], Config(train_years=1, rounds=20, top_k=3), train_panel=panel)
+    assert set(preds["symbol"].unique()) <= {f"S{i:02d}" for i in range(15)}
+    assert folds[0]["train_rows"] > subset.filter(pl.col("date").dt.year() == 2019).height

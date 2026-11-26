@@ -50,15 +50,15 @@ FEATURES = [
 TARGETS = ["y1", "y5"]
 
 
-def fetch(dest: Path) -> Path:
-    """Download the daily equity and delivery tables (cached by the hub client)."""
+def fetch(dest: Path, fno: bool = False) -> Path:
+    """Download the daily equity and delivery tables, plus F&O when needed (cached by the hub client)."""
     from huggingface_hub import snapshot_download
 
     snapshot_download(
         DATASET_REPO,
         repo_type="dataset",
         local_dir=dest,
-        allow_patterns=["eq_daily/**", "eq_delivery/**"],
+        allow_patterns=["eq_daily/**", "eq_delivery/**", *(["fo_daily/**"] if fno else [])],
         token=os.environ.get("HF_TOKEN"),
         max_workers=16,
     )
@@ -74,6 +74,21 @@ def load(root: Path) -> pl.DataFrame:
     dl = pl.scan_parquet(root / "eq_delivery" / "**" / "*.parquet").filter(pl.col("series").is_in(SERIES))
     dl = dl.select("date", "symbol", "deliverable_pct").unique(["date", "symbol"])
     return eq.join(dl, on=["date", "symbol"], how="left").unique(["date", "symbol"]).collect()
+
+
+def fno_members(root: Path) -> pl.DataFrame:
+    """Point-in-time F&O stock list: (date, symbol) for every stock with futures trading that day.
+
+    Using each day's actual list (not today's) avoids survivorship bias: stocks later dropped from F&O count
+    while they were in it, and stocks added later do not leak back into the past.
+    """
+    return (
+        pl.scan_parquet(root / "fo_daily" / "**" / "*.parquet")
+        .filter(pl.col("instrument") == "FUTSTK")
+        .select("date", "symbol")
+        .unique()
+        .collect()
+    )
 
 
 def build(raw: pl.DataFrame) -> pl.DataFrame:
