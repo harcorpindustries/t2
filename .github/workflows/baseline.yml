@@ -1,0 +1,46 @@
+name: baseline
+
+on:
+  schedule:
+    - cron: "30 15 * * 0"  # Sunday 21:00 IST, after the week's data is in
+  workflow_dispatch:
+    inputs:
+      from_year:
+        description: First walk-forward test year
+        default: "2008"
+      target:
+        description: y1 (next session open to close) or y5 (next open to 5th close)
+        default: "y1"
+      train_years:
+        description: Training window in years
+        default: "6"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: baseline
+  cancel-in-progress: false
+
+jobs:
+  walk-forward:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen
+      - name: Walk-forward LightGBM baseline
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: >
+          uv run python -m t2.models.baseline run
+          --from-year ${{ inputs.from_year || '2008' }}
+          --target ${{ inputs.target || 'y1' }}
+          --train-years ${{ inputs.train_years || '6' }}
+          --out reports/baseline
+      - uses: actions/upload-artifact@v4
+        with:
+          name: baseline-${{ inputs.target || 'y1' }}-${{ github.run_id }}
+          path: reports/baseline
+          retention-days: 90
