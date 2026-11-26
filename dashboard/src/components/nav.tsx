@@ -28,7 +28,7 @@ export function Nav() {
         const active = href === "/" ? path === "/" : path.startsWith(href);
         return (
           <Link key={href} href={href}
-            className={cn("flex h-11 items-center gap-3 rounded-full px-4 text-sm font-medium transition-colors",
+            className={cn("flex h-11 items-center gap-3 rounded-md px-4 text-sm font-medium transition-colors",
               active ? "bg-brand/15 text-brand" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>
             <Icon className="size-4" />
             {label}
@@ -36,7 +36,7 @@ export function Nav() {
         );
       })}
       <button type="button" onClick={signOut}
-        className="flex h-11 items-center gap-3 rounded-full px-4 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground">
+        className="flex h-11 items-center gap-3 rounded-md px-4 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground">
         <LogOut className="size-4" />
         Sign out
       </button>
