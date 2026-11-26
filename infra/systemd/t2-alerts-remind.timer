@@ -1,0 +1,10 @@
+[Unit]
+Description=t2 Breeze login reminder (08:45 and 09:10 IST on weekdays)
+
+[Timer]
+OnCalendar=Mon..Fri 08:45
+OnCalendar=Mon..Fri 09:10
+Persistent=false
+
+[Install]
+WantedBy=timers.target

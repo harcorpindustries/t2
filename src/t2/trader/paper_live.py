@@ -24,6 +24,7 @@ from zoneinfo import ZoneInfo
 
 import polars as pl
 
+from t2 import alerts
 from t2.backtest.holding import rebalance
 from t2.brokers.base import Contract, Kind, Order, Product, Side
 from t2.data import hf_store
@@ -193,7 +194,11 @@ def run_open(con: sqlite3.Connection, cfg: BookConfig, quotes: Quotes, now: date
     if (today - sig["date"][0]).days > 4:
         return {"skipped": f"signals are stale ({signal_date}); not trading on old picks"}
     held = positions(con)
-    intents = plan(held, sig, cfg, today)
+    flatten = (DATA / "FLATTEN").exists()
+    if flatten:  # requested from the dashboard: sell everything held, open nothing new
+        intents = [{"symbol": s, "qty": -p["qty"], "reason": "flatten"} for s, p in sorted(held.items())]
+    else:
+        intents = plan(held, sig, cfg, today)
     need = sorted({i["symbol"] for i in intents} | set(held))
     px = quotes(need)
     live = {s: v for s, v in px.items() if v[1].date() == today}
@@ -244,6 +249,10 @@ def run_open(con: sqlite3.Connection, cfg: BookConfig, quotes: Quotes, now: date
         (str(today), signal_date, done, total_ch, blocked),
     )
     con.commit()
+    if flatten:
+        (DATA / "FLATTEN").unlink(missing_ok=True)
+        con.execute("insert into events values (?,?,?)", (now.isoformat(), "flatten_done", f"{done} exits"))
+        con.commit()
     return {
         "signal_date": signal_date,
         "intents": len(intents),
@@ -381,8 +390,19 @@ def main(argv: list[str] | None = None) -> int:
     if a.cmd == "open" and now.time() < time(9, 15):
         print("before the open")
         return 0
-    result = (run_open if a.cmd == "open" else run_close)(con, cfg, breeze_quotes(), now)
+    prev = con.execute(
+        "select equity from days where equity is not null and day < ? order by day desc limit 1", (str(now.date()),)
+    ).fetchone()
+    try:
+        result = (run_open if a.cmd == "open" else run_close)(con, cfg, breeze_quotes(), now)
+    except Exception as exc:
+        alerts.send(f"T2 paper {a.cmd} failed: {type(exc).__name__}: {exc}"[:500])
+        raise
     print(json.dumps(result, default=str))
+    if a.cmd == "close":
+        alerts.send(alerts.close_summary(result, prev[0] if prev else cfg.capital))
+    elif "skipped" not in result or now.time() >= time(10, 15):  # earlier skips are retried at 09:40 / 10:15
+        alerts.send(alerts.open_summary(result))
     return 0
 
 

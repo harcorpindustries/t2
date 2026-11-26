@@ -1,0 +1,11 @@
+[Unit]
+Description=t2 alert: remind on the phone if today's Breeze login is missing (no-op when alerts are not set up)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/opt/t2/app
+EnvironmentFile=/opt/t2/.env
+ExecStart=/usr/local/bin/uv run --frozen python -m t2.alerts remind
