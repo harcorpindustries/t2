@@ -28,7 +28,7 @@ export function ThemeToggle({ compact }: { compact?: boolean }) {
   if (compact) {
     return (
       <button type="button" role="switch" aria-checked={dark} aria-label="Dark theme" onClick={toggle}
-        className="group relative flex h-11 w-full items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
+        className="group relative flex h-10 w-full items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
         {dark ? <Moon className="size-[18px]" /> : <Sun className="size-[18px]" />}
         <span role="tooltip" className="pointer-events-none absolute left-full top-1/2 z-50 ml-3 -translate-y-1/2 whitespace-nowrap rounded-md bg-foreground px-2.5 py-1.5 text-xs font-medium text-background opacity-0 shadow-md transition-opacity group-hover:opacity-100">
           Dark theme: {dark ? "on" : "off"}
@@ -38,7 +38,7 @@ export function ThemeToggle({ compact }: { compact?: boolean }) {
   }
   return (
     <button type="button" role="switch" aria-checked={dark} onClick={toggle}
-      className="flex h-11 w-full items-center gap-3 rounded-md px-3 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground">
+      className="flex h-10 w-full items-center gap-3 rounded-md px-3 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground">
       <Moon className="size-[18px]" />
       <span className="flex-1 text-left">Dark theme</span>
       <span className={cn("relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors",

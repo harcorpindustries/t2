@@ -39,7 +39,7 @@ export function Confirm({ open, title, children, confirmLabel, danger, onConfirm
         {children && <div className="mt-2 text-sm text-muted-foreground">{children}</div>}
         <div className="mt-6 flex justify-end gap-3">
           <button ref={cancelRef} type="button" onClick={onCancel}
-            className="inline-flex h-11 items-center rounded-md border border-border bg-background px-5 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
+            className="inline-flex h-10 items-center rounded-md border border-border bg-background px-4 text-sm font-medium hover:bg-muted focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50">
             Cancel
           </button>
           <Button variant={danger ? "danger" : "primary"} onClick={onConfirm} disabled={busy}>{confirmLabel}</Button>

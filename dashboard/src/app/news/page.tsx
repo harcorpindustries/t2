@@ -74,17 +74,17 @@ export default function NewsPage() {
       <div className="mb-4 flex flex-wrap gap-2">
         {GROUPS.map((g) => (
           <button key={g.key} type="button" onClick={() => { setGroup(g.key); setOpen(null); }}
-            className={cn("h-11 rounded-md px-5 text-sm font-medium transition-colors",
+            className={cn("h-8 rounded-md px-3 text-sm font-medium transition-colors",
               group === g.key ? "bg-brand/15 text-brand" : "text-muted-foreground hover:bg-muted hover:text-foreground")}>
             {g.label}
           </button>
         ))}
       </div>
-      <form className="mb-8 flex flex-wrap gap-3" onSubmit={(e) => {
+      <form className="mb-6 flex flex-wrap items-center gap-2" onSubmit={(e) => {
         e.preventDefault();
         setQuery(`${q ? `&q=${encodeURIComponent(q)}` : ""}${symbol ? `&symbol=${encodeURIComponent(symbol)}` : ""}`);
       }}>
-        <Input placeholder="Search headlines" value={q} onChange={(e) => setQ(e.target.value)} />
+        <Input placeholder="Search headlines" value={q} onChange={(e) => setQ(e.target.value)} className="w-72" />
         <Input placeholder="Symbol, e.g. TCS" value={symbol} onChange={(e) => setSymbol(e.target.value)} className="w-44" />
         <Button type="submit"><Search className="size-4" />Search</Button>
       </form>
