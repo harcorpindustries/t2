@@ -15,6 +15,7 @@ import secrets
 import sqlite3
 import subprocess
 import time
+import urllib.parse
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -331,9 +332,39 @@ def status() -> dict:
 
 
 # ----- news -----
+NSE_FILINGS = "https://www.nseindia.com/companies-listing/corporate-filings-announcements"
+GROUPS = {
+    "articles": ("news", "aggregator"),
+    "filings": ("exchange",),
+    "regulators": ("regulator",),
+}
+
+
+def file_type(url: str) -> str:
+    path = url.split("?", 1)[0].lower()
+    for ext in ("xml", "zip", "pdf"):
+        if path.endswith("." + ext):
+            return ext
+    return "page"
+
+
+def news_links(item: dict) -> dict:
+    """The link a person should open, plus the raw file for exchange filings (XBRL/ZIP are data, not pages)."""
+    url, kind = item["url"], file_type(item["url"])
+    if item["category"] == "exchange" and kind in ("xml", "zip"):
+        symbols = [t for t in (item.get("tickers") or "").split(",") if t]
+        link = f"{NSE_FILINGS}?symbol={urllib.parse.quote(symbols[0])}" if symbols else NSE_FILINGS
+        return {"link": link, "raw_url": url, "raw_type": kind}
+    return {"link": url, "raw_url": None, "raw_type": kind if kind != "page" else None}
+
+
 @app.get("/api/news")
-def news(q: str = "", symbol: str = "", limit: int = 50) -> dict:
+def news(q: str = "", symbol: str = "", group: str = "articles", limit: int = 50) -> dict:
     where, args = ["1=1"], []
+    if group in GROUPS:
+        cats = GROUPS[group]
+        where.append(f"category in ({','.join('?' * len(cats))})")
+        args += list(cats)
     if q:
         where.append("(title like ? or summary like ?)")
         args += [f"%{q}%", f"%{q}%"]
@@ -341,11 +372,23 @@ def news(q: str = "", symbol: str = "", limit: int = 50) -> dict:
         where.append("(',' || tickers || ',') like ?")
         args.append(f"%,{symbol.upper()},%")
     sql = (
-        "select source, category, url, title, summary, published_at, first_seen_at, tickers from items where "
+        "select id, source, category, url, title, summary, published_at, first_seen_at, tickers,"
+        " text_status = 'ok' as has_text from items where "
         + " and ".join(where)
         + " order by coalesce(published_at, first_seen_at) desc limit ?"
     )
-    return {"items": rows(NEWS_DB, sql, (*args, min(max(limit, 1), 200)))}
+    items = rows(NEWS_DB, sql, (*args, min(max(limit, 1), 200)))
+    return {"items": [it | news_links(it) for it in items]}
+
+
+@app.get("/api/news/{item_id}")
+def news_item(item_id: str) -> dict:
+    found = rows(NEWS_DB, "select id, title, url, source, published_at, text from items where id = ?", (item_id,))
+    if not found:
+        raise HTTPException(status_code=404, detail="not found")
+    it = found[0]
+    it["text"] = (it.get("text") or "")[:20000]
+    return it
 
 
 # ----- static dashboard -----

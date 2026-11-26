@@ -28,10 +28,18 @@ def client(tmp_path, monkeypatch):
     con.commit()
     news = sqlite3.connect(tmp_path / "news.db")
     news.executescript(
-        """create table items (source text, category text, url text, title text, summary text,
-        published_at text, first_seen_at text, tickers text);
-        insert into items values ('nse', 'filing', 'u1', 'TCS results', '', '2026-11-27', '2026-11-27', 'TCS,INFY');
-        insert into items values ('et', 'press', 'u2', 'Markets today', '', '2026-11-27', '2026-11-27', '');"""
+        """create table items (id text, source text, category text, url text, title text, summary text,
+        published_at text, first_seen_at text, tickers text, text text, text_status text);
+        insert into items values ('a1', 'mint', 'news', 'https://x.com/tcs', 'TCS results', '', '2026-11-27',
+          '2026-11-27', 'TCS,INFY', 'Full article text', 'ok');
+        insert into items values ('a2', 'et', 'news', 'https://x.com/mkt', 'Markets today', '', '2026-11-27',
+          '2026-11-27', '', null, 'error');
+        insert into items values ('f1', 'nse_online_announcements', 'exchange',
+          'https://nsearchives.nseindia.com/corporate/xbrl/X.xml', 'Dalmia Bharat Limited', 'informed the Exchange',
+          '2026-11-27', '2026-11-27', 'DALMIABHA', null, 'skipped');
+        insert into items values ('f2', 'nse_board_meetings', 'exchange',
+          'https://nsearchives.nseindia.com/corporate/B.pdf', 'Dollex', '', '2026-11-26', '2026-11-26', '', null,
+          'skipped');"""
     )
     news.commit()
     c = TestClient(api.app, base_url="https://testserver")
@@ -57,8 +65,25 @@ def test_kill_switch_needs_login_or_token(client, tmp_path):
 
 
 def test_news_search(client):
-    assert [i["url"] for i in client.get("/api/news", params={"symbol": "infy"}).json()["items"]] == ["u1"]
-    assert [i["url"] for i in client.get("/api/news", params={"q": "markets"}).json()["items"]] == ["u2"]
+    assert [i["id"] for i in client.get("/api/news", params={"symbol": "infy"}).json()["items"]] == ["a1"]
+    assert [i["id"] for i in client.get("/api/news", params={"q": "markets"}).json()["items"]] == ["a2"]
+
+
+def test_news_groups_and_human_links(client):
+    arts = client.get("/api/news").json()["items"]  # default group: readable articles only
+    assert {i["id"] for i in arts} == {"a1", "a2"}
+    assert arts[0]["link"].startswith("https://x.com/") and arts[0]["raw_url"] is None
+    filings = {i["id"]: i for i in client.get("/api/news", params={"group": "filings"}).json()["items"]}
+    xbrl = filings["f1"]
+    assert xbrl["link"].endswith("corporate-filings-announcements?symbol=DALMIABHA")
+    assert xbrl["raw_type"] == "xml" and xbrl["raw_url"].endswith("X.xml")
+    assert filings["f2"]["link"].endswith("B.pdf")  # PDFs are readable: link straight to them
+    assert len(client.get("/api/news", params={"group": "all"}).json()["items"]) == 4
+
+
+def test_news_item_text(client):
+    assert client.get("/api/news/a1").json()["text"] == "Full article text"
+    assert client.get("/api/news/nope").status_code == 404
 
 
 def test_everything_needs_login(client):
