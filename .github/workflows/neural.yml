@@ -1,9 +1,12 @@
 name: neural
 
-# Neural challenger (step 1): Mamba-style encoder per stock + attention across stocks, trained on CPU.
-# One job per test year (each trains on the 6 years before it), then a comparison with the LightGBM champion
-# on the same years, the same metrics and the same cash book. The summary goes to the run page and the model repo
-# (experiments/neural/), where the dashboard's Model page shows it.
+# Neural challenger: Mamba-style encoder per stock (+ headline vectors) + attention across stocks, trained on CPU.
+# Each test year trains on the 6 years before it, in up to three chained 5-hour jobs (checkpoint in between).
+# Then a comparison with the LightGBM champion and with rank-averaged blends of the two, on the same years, the
+# same metrics and the same cash book. The summary goes to the run page and the model repo (experiments/neural/),
+# where the dashboard's Model page shows it.
+# from_run: skip training and compare the finished years of an earlier run again (e.g. after changing the
+# comparison); its artifacts are kept 90 days.
 on:
   workflow_dispatch:
     inputs:
@@ -12,7 +15,7 @@ on:
         default: '[2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026]'
       steps:
         description: Training steps per year
-        default: "3000"
+        default: "10000"
       d_model:
         description: Model width
         default: "128"
@@ -21,13 +24,20 @@ on:
         default: "3"
       lookback:
         description: Days of history per stock
-        default: "40"
+        default: "60"
+      news_dims:
+        description: Headline vector inputs (0 = off)
+        default: "32"
+      from_run:
+        description: Compare an earlier run's finished years instead of training (run ID)
+        default: ""
 
 permissions:
   contents: read
 
 jobs:
   check:
+    if: inputs.from_run == ''
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -36,39 +46,73 @@ jobs:
       - run: uv sync --frozen
       - name: CPU-only torch (not part of the server install)
         run: uv pip install torch --index-url https://download.pytorch.org/whl/cpu
-      - run: uv run --no-sync pytest -q tests/test_neural.py tests/test_seqdata.py
+      - run: uv run --no-sync pytest -q tests/test_neural.py tests/test_seqdata.py tests/test_news_embed.py
 
-  fold:
+  stage1:
     needs: check
-    runs-on: ubuntu-latest
-    timeout-minutes: 340
     strategy:
       fail-fast: false
       matrix:
         year: ${{ fromJSON(inputs.years) }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-      - run: uv sync --frozen
-      - run: uv pip install torch --index-url https://download.pytorch.org/whl/cpu
-      - name: Train and score ${{ matrix.year }}
-        env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: >
-          uv run --no-sync python -m t2.models.neural fold --year ${{ matrix.year }}
-          --steps ${{ inputs.steps }} --d-model ${{ inputs.d_model }} --layers ${{ inputs.layers }}
-          --lookback ${{ inputs.lookback }} --out reports/neural/${{ matrix.year }}
-      - uses: actions/upload-artifact@v4
-        with:
-          name: neural-fold-${{ matrix.year }}
-          path: reports/neural/${{ matrix.year }}
-          retention-days: 90
+    uses: ./.github/workflows/neural-stage.yml
+    secrets: inherit
+    with:
+      year: ${{ matrix.year }}
+      out: neural-s1-${{ matrix.year }}
+      steps: ${{ inputs.steps }}
+      d_model: ${{ inputs.d_model }}
+      layers: ${{ inputs.layers }}
+      lookback: ${{ inputs.lookback }}
+      news_dims: ${{ inputs.news_dims }}
+
+  stage2:
+    # one failed year must not stop the others: run whenever the check passed
+    needs: [check, stage1]
+    if: always() && needs.check.result == 'success'
+    strategy:
+      fail-fast: false
+      matrix:
+        year: ${{ fromJSON(inputs.years) }}
+    uses: ./.github/workflows/neural-stage.yml
+    secrets: inherit
+    with:
+      year: ${{ matrix.year }}
+      prev: neural-s1-${{ matrix.year }}
+      out: neural-s2-${{ matrix.year }}
+      steps: ${{ inputs.steps }}
+      d_model: ${{ inputs.d_model }}
+      layers: ${{ inputs.layers }}
+      lookback: ${{ inputs.lookback }}
+      news_dims: ${{ inputs.news_dims }}
+
+  stage3:
+    needs: [check, stage2]
+    if: always() && needs.check.result == 'success'
+    strategy:
+      fail-fast: false
+      matrix:
+        year: ${{ fromJSON(inputs.years) }}
+    uses: ./.github/workflows/neural-stage.yml
+    secrets: inherit
+    with:
+      year: ${{ matrix.year }}
+      prev: neural-s2-${{ matrix.year }}
+      out: neural-fold-${{ matrix.year }}
+      final: true
+      steps: ${{ inputs.steps }}
+      d_model: ${{ inputs.d_model }}
+      layers: ${{ inputs.layers }}
+      lookback: ${{ inputs.lookback }}
+      news_dims: ${{ inputs.news_dims }}
 
   compare:
-    needs: fold
-    if: always() && needs.check.result == 'success'
+    needs: [check, stage3]
+    if: always() && (inputs.from_run != '' || needs.check.result == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -78,6 +122,8 @@ jobs:
         with:
           pattern: neural-fold-*
           path: reports/neural
+          run-id: ${{ inputs.from_run || github.run_id }}
+          github-token: ${{ github.token }}
       - name: Compare with the LightGBM champion
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}

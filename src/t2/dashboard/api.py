@@ -570,27 +570,37 @@ def _model() -> dict:
         for f in sorted((x.path for x in tree if x.path.endswith(".json")), reverse=True)[:5]:
             r = json.loads(Path(hf_hub_download(repo, f, token=token)).read_text())
             row = {
-                "name": "Neural (Mamba + cross-stock attention)",
+                "name": r.get("name", "Neural (Mamba + cross-stock attention)"),
                 "finished": r.get("finished"),
                 "years": r.get("years"),
                 "verdict": r.get("verdict"),
                 "params": r["neural"].get("params"),
+                "agreement": r.get("agreement"),
+                "neural": _scores(r["neural"]),
+                "lightgbm": _scores(r["lightgbm"]),
+                "blends": [
+                    {"label": f"Blend {b['weight']:.0%} neural", "scores": _scores(b)}
+                    for b in (r.get("blends") or {}).values()
+                ],
             }
-            for who in ("neural", "lightgbm"):
-                o, b = r[who]["overall"], r[who]["book"]["overall"]
-                row[who] = {
-                    "ic": o.get("ic_mean"),
-                    "ic_hit": o.get("ic_hit"),
-                    "long_hit": o.get("long_hit"),
-                    "annual": b.get("annual_return"),
-                    "sharpe": b.get("sharpe"),
-                    "max_dd": b.get("max_drawdown"),
-                }
             challengers.append(row)
     except Exception:  # no experiments yet
         pass
     meta["challengers"] = challengers
     return meta
+
+
+def _scores(r: dict) -> dict:
+    """A challenger comparison row: overall signal quality and the cash book's results."""
+    o, b = r["overall"], r["book"]["overall"]
+    return {
+        "ic": o.get("ic_mean"),
+        "ic_hit": o.get("ic_hit"),
+        "long_hit": o.get("long_hit"),
+        "annual": b.get("annual_return"),
+        "sharpe": b.get("sharpe"),
+        "max_dd": b.get("max_drawdown"),
+    }
 
 
 @app.get("/api/model")

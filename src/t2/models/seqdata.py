@@ -113,3 +113,29 @@ def rank_ic(score: np.ndarray, label: np.ndarray) -> float:
     a = np.argsort(np.argsort(score[ok])).astype(np.float64)
     b = np.argsort(np.argsort(label[ok])).astype(np.float64)
     return float(np.corrcoef(a, b)[0, 1])
+
+
+def pca_fit(x: np.ndarray, k: int, max_rows: int = 200_000, seed: int = 0) -> tuple[np.ndarray, np.ndarray]:
+    """(mean, components (k, dim)) of the rows of x; components are sign-fixed so refits agree."""
+    if len(x) > max_rows:
+        x = x[np.random.default_rng(seed).choice(len(x), max_rows, replace=False)]
+    mean = x.mean(axis=0)
+    _, _, vt = np.linalg.svd(x - mean, full_matrices=False)
+    comp = vt[:k]
+    comp *= np.where(comp[np.arange(len(comp)), np.abs(comp).argmax(axis=1)] < 0, -1.0, 1.0)[:, None]
+    return mean.astype(np.float32), comp.astype(np.float32)
+
+
+def news_columns(keys: pl.DataFrame, vecs: np.ndarray, fit_before: date, k: int) -> tuple[pl.DataFrame, list[str]]:
+    """Headline vectors per (date, symbol) compressed to k numbers, with the compression fitted only on rows
+    dated before `fit_before` (the fold's training period: no peeking at the test years)."""
+    names = [f"news_e{i}" for i in range(k)]
+    fit = (keys["date"] < fit_before).to_numpy()
+    if fit.sum() < k * 10:
+        raise ValueError(f"only {int(fit.sum())} news rows before {fit_before}: too few to fit {k} components")
+    mean, comp = pca_fit(vecs[fit], k)
+    z = (vecs - mean) @ comp.T
+    cols = keys.select("date", "symbol").with_columns(
+        [pl.Series(n, z[:, i].astype(np.float32)) for i, n in enumerate(names)]
+    )
+    return cols, names
