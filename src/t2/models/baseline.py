@@ -51,6 +51,8 @@ class Config:
     top_k: int = 20
     position_rs: float = 50_000.0
     slippage_bps: float = 5.0
+    universe: str = "all"  # stocks the portfolio trades: all liquid EQ, or point-in-time F&O stocks
+    train_universe: str = "all"
 
 
 def with_label(df: pl.DataFrame, target: str) -> pl.DataFrame:
@@ -142,7 +144,11 @@ def train(df: pl.DataFrame, cfg: Config) -> lgb.Booster:
     return lgb.train(PARAMS, ds, num_boost_round=cfg.rounds)
 
 
-def walk_forward(panel: pl.DataFrame, years: list[int], cfg: Config) -> tuple[list[dict], pl.DataFrame]:
+def walk_forward(
+    panel: pl.DataFrame, years: list[int], cfg: Config, train_panel: pl.DataFrame | None = None
+) -> tuple[list[dict], pl.DataFrame]:
+    """Test on `panel`, train on `train_panel` (defaults to the same panel)."""
+    train_panel = panel if train_panel is None else train_panel
     sessions = panel.select(pl.col("date").unique().sort()).get_column("date")
     folds, preds = [], []
     for y in years:
@@ -155,7 +161,7 @@ def walk_forward(panel: pl.DataFrame, years: list[int], cfg: Config) -> tuple[li
             continue
         train_end = before[-cfg.embargo_days - 1]
         train_start = date(y - cfg.train_years, 1, 1)
-        tr = panel.filter(pl.col("date").is_between(train_start, train_end))
+        tr = train_panel.filter(pl.col("date").is_between(train_start, train_end))
         t0 = time.time()
         model = train(tr, cfg)
         test = test.filter(pl.col(cfg.target).is_not_null())
@@ -172,7 +178,8 @@ def summary_md(folds: list[dict], overall: dict, cfg: Config) -> str:
     cols = ["year", "days", "ic_mean", "ic_hit", "long_gross_bps", "long_net_bps", "long_net_sharpe", "ls_net_bps"]
     cols += ["ls_net_sharpe", "bench_bps", "cost_bps"]
     lines = [
-        f"## LightGBM baseline ({cfg.target}, top/bottom {cfg.top_k}, Rs {cfg.position_rs:,.0f} per position)",
+        f"## LightGBM baseline ({cfg.target}, trade {cfg.universe}, train {cfg.train_universe}, "
+        f"top/bottom {cfg.top_k}, Rs {cfg.position_rs:,.0f} per position)",
         "",
         "| " + " | ".join(cols) + " |",
         "|" + "---|" * len(cols),
@@ -187,14 +194,29 @@ def summary_md(folds: list[dict], overall: dict, cfg: Config) -> str:
 
 
 def run(args: argparse.Namespace) -> None:
-    cfg = Config(target=args.target, train_years=args.train_years, rounds=args.rounds, top_k=args.top_k)
-    root = eod.fetch(Path(args.data))
+    cfg = Config(
+        target=args.target,
+        train_years=args.train_years,
+        rounds=args.rounds,
+        top_k=args.top_k,
+        universe=args.universe,
+        train_universe=args.train_universe,
+    )
+    fno = "fno" in (cfg.universe, cfg.train_universe)
+    root = eod.fetch(Path(args.data), fno=fno, offline=args.offline)
     t0 = time.time()
-    panel = eod.build(eod.load(root))
-    print(f"panel {panel.height:,} rows, {panel['symbol'].n_unique()} symbols, {time.time() - t0:.0f}s", flush=True)
+    full = eod.build(eod.load(root))
+    members = eod.fno_members(root) if fno else None
+    pick = {"all": full, "fno": full.join(members, on=["date", "symbol"]) if members is not None else full}
+    panel, train_panel = pick[cfg.universe], pick[cfg.train_universe]
+    print(
+        f"panel {full.height:,} rows; trade universe {cfg.universe}: {panel.height:,} rows, "
+        f"{panel['symbol'].n_unique()} symbols; train universe {cfg.train_universe} ({time.time() - t0:.0f}s)",
+        flush=True,
+    )
     last = panel["date"].max()
     assert isinstance(last, date)
-    folds, preds = walk_forward(panel, list(range(args.from_year, last.year + 1)), cfg)
+    folds, preds = walk_forward(panel, list(range(args.from_year, last.year + 1)), cfg, train_panel)
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     overall = {"year": "all"} | evaluate(
@@ -202,6 +224,7 @@ def run(args: argparse.Namespace) -> None:
     )
     report = {"config": asdict(cfg), "params": PARAMS, "data_last_date": str(last), "folds": folds, "overall": overall}
     (out / "report.json").write_text(json.dumps(report, indent=2, default=str))
+    preds.select("date", "symbol", "score").write_parquet(out / "preds.parquet")  # input for the sandbox replay
     md = summary_md(folds, overall, cfg)
     (out / "report.md").write_text(md)
     if summary := os.environ.get("GITHUB_STEP_SUMMARY"):
@@ -209,7 +232,7 @@ def run(args: argparse.Namespace) -> None:
             fh.write(md)
     print(md)
     # the live candidate: same recipe trained on the most recent window
-    final = train(panel.filter(pl.col("date") >= date(last.year - cfg.train_years, 1, 1)), cfg)
+    final = train(train_panel.filter(pl.col("date") >= date(last.year - cfg.train_years, 1, 1)), cfg)
     final.save_model(str(out / "model.txt"))
     (out / "features.json").write_text(json.dumps(eod.FEATURES))
     imp = sorted(zip(eod.FEATURES, final.feature_importance("gain").tolist(), strict=True), key=lambda x: -x[1])
@@ -225,7 +248,10 @@ def main() -> None:
     r.add_argument("--train-years", type=int, default=6)
     r.add_argument("--rounds", type=int, default=300)
     r.add_argument("--top-k", type=int, default=20)
+    r.add_argument("--universe", choices=["all", "fno"], default="all")
+    r.add_argument("--train-universe", choices=["all", "fno"], default="all")
     r.add_argument("--data", default="data/hf")
+    r.add_argument("--offline", action="store_true", help="use data already in --data, skip the hub")
     r.add_argument("--out", default="reports/baseline")
     args = p.parse_args()
     run(args)

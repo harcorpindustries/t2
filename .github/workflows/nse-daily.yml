@@ -25,6 +25,10 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: uv run python -m t2.data.collect_nse daily --lookback 10
+      - name: Rebuild this year's compacted tables
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: uv run python -m t2.data.compact run --current
       - name: Audit for gaps
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}

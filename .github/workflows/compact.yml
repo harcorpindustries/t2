@@ -1,0 +1,31 @@
+name: compact
+
+on:
+  workflow_dispatch:
+    inputs:
+      from_year:
+        description: First year
+        default: "1994"
+      to_year:
+        description: Last year
+        default: "2026"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compact
+  cancel-in-progress: false
+
+jobs:
+  compact:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen
+      - name: Build one file per table per year
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: uv run python -m t2.data.compact run --from-year ${{ inputs.from_year }} --to-year ${{ inputs.to_year }}
