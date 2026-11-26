@@ -48,6 +48,7 @@ class BookConfig:
     risk: Limits
     vehicle: str = "fut"  # "fut": stock futures (lots, margin, rolls) | "delivery": cash shares, fully paid
     long_only: bool = False
+    signals: str = "signals"  # dataset folder of the champion this book follows
 
     @property
     def kind_product(self) -> tuple[Kind, Product]:
@@ -102,11 +103,11 @@ def positions(con: sqlite3.Connection) -> dict[str, dict]:
     return {r[0]: dict(zip(cols, r, strict=True)) for r in con.execute("select * from positions where qty != 0")}
 
 
-def latest_signals(today: date) -> pl.DataFrame:
+def latest_signals(today: date, folder: str = "signals") -> pl.DataFrame:
     """Most recent signals file for a session before today."""
     files = [
         f.path
-        for f in hf_store.api().list_repo_tree(hf_store.DATASET_REPO, repo_type="dataset", path_in_repo="signals")
+        for f in hf_store.api().list_repo_tree(hf_store.DATASET_REPO, repo_type="dataset", path_in_repo=folder)
         if f.path.endswith(".parquet")
     ]
     dated = sorted((date.fromisoformat(f.split("date=")[1][:10]), f) for f in files)
@@ -187,7 +188,7 @@ def run_open(con: sqlite3.Connection, cfg: BookConfig, quotes: Quotes, now: date
     today = now.date()
     if con.execute("select 1 from days where day=?", (str(today),)).fetchone():
         return {"skipped": "already traded today"}
-    sig = latest_signals(today)
+    sig = latest_signals(today, cfg.signals)
     signal_date = str(sig["date"][0])
     if (today - sig["date"][0]).days > 4:
         return {"skipped": f"signals are stale ({signal_date}); not trading on old picks"}

@@ -185,9 +185,16 @@ def _signals() -> dict:
 
     from t2.data import hf_store
 
+    folder = "signals"
+    try:  # follow the champion the paper book trades
+        from t2.trader.paper_live import CONFIG
+
+        folder = json.loads(CONFIG.read_text()).get("signals", folder)
+    except (OSError, ValueError):
+        pass
     files = sorted(
         f.path
-        for f in hf_store.api().list_repo_tree(hf_store.DATASET_REPO, repo_type="dataset", path_in_repo="signals")
+        for f in hf_store.api().list_repo_tree(hf_store.DATASET_REPO, repo_type="dataset", path_in_repo=folder)
         if f.path.endswith(".parquet")
     )
     if not files:
@@ -207,7 +214,15 @@ def _model() -> dict:
 
     # the repo name only: importing the model code would pull in the ML libraries the server does not need
     repo = os.environ.get("HF_MODEL_REPO", "harcorp/t2-models")
-    p = hf_hub_download(repo, "champion/meta.json", token=os.environ.get("HF_TOKEN"))
+    prefix = "champion"
+    try:
+        from t2.trader.paper_live import CONFIG
+
+        if json.loads(CONFIG.read_text()).get("signals") == "signals-cash":
+            prefix = "champion-cash"
+    except (OSError, ValueError):
+        pass
+    p = hf_hub_download(repo, f"{prefix}/meta.json", token=os.environ.get("HF_TOKEN"))
     return json.loads(Path(p).read_text())
 
 

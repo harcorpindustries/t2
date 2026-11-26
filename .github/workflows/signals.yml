@@ -15,12 +15,16 @@ concurrency:
 jobs:
   score:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        book: [futures, cash]
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
       - run: uv sync --frozen
-      - name: Score every F&O stock with the champion
+      - name: Score the champion's universe
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: uv run python -m t2.models.champion signals
+        run: uv run python -m t2.models.champion signals --book ${{ matrix.book }}
