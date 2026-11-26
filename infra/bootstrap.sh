@@ -8,7 +8,7 @@ export DEBIAN_FRONTEND=noninteractive
 timedatectl set-timezone Asia/Kolkata
 apt-get update -q
 apt-get -yq upgrade
-apt-get -yq install chrony ufw fail2ban unattended-upgrades ca-certificates curl git jq
+apt-get -yq install chrony ufw fail2ban unattended-upgrades ca-certificates curl git jq sqlite3 libgomp1
 systemctl enable --now chrony
 
 # Automatic security updates, no surprise reboots during market hours.
