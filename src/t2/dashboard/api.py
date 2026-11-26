@@ -1,8 +1,8 @@
 """Dashboard backend on the live server: read-only views of the paper book, signals, model, pipelines and news,
 plus the kill switch. Serves the static dashboard build from /opt/t2/dashboard.
 
-Listens on 127.0.0.1 only: reach it through an SSH tunnel (ssh -L 8080:127.0.0.1:8080 ...).
-Changing the kill switch also needs the DASHBOARD_TOKEN from /opt/t2/.env.
+Listens on 127.0.0.1 only. Public access goes through a Cloudflare Tunnel (t2.harcorp.biz); every page and API
+call needs a password login (auth.py) or, for scripts, the DASHBOARD_TOKEN header.
 
     uvicorn t2.dashboard.api:app --host 127.0.0.1 --port 8080
 """
@@ -19,16 +19,82 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, Header, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+
+from t2.dashboard import auth
 
 DATA = Path(os.environ.get("T2_PAPER_DIR", "/opt/t2/data"))
 NEWS_DB = Path(os.environ.get("T2_NEWS_DB", "/opt/t2/data/news.db"))
 STATIC = Path(os.environ.get("T2_DASHBOARD_DIR", "/opt/t2/dashboard"))
 
-app = FastAPI(title="t2 dashboard", docs_url=None, redoc_url=None)
+app = FastAPI(title="t2 dashboard", docs_url=None, redoc_url=None, openapi_url=None)
+PUBLIC = {"/login", "/login.html", "/api/login", "/favicon.ico"}
+PUBLIC_PREFIX = "/_next/"  # the UI's static assets (no data in them)
+
+
+def _token_ok(request: Request) -> bool:
+    expected = os.environ.get("DASHBOARD_TOKEN", "")
+    got = request.headers.get("x-dashboard-token", "")
+    return bool(expected) and secrets.compare_digest(got, expected)
+
+
+@app.middleware("http")
+async def require_login(request: Request, call_next: Any) -> Response:
+    path = request.url.path
+    if path in PUBLIC or path.startswith(PUBLIC_PREFIX):
+        return await call_next(request)
+    if not auth.configured():
+        return JSONResponse({"detail": "dashboard password not set"}, status_code=503)
+    if auth.valid_session(request.cookies.get(auth.COOKIE)) or _token_ok(request):
+        response = await call_next(request)
+        response.headers["Cache-Control"] = "no-store"
+        return response
+    if path.startswith("/api/"):
+        return JSONResponse({"detail": "login required"}, status_code=401)
+    return RedirectResponse("/login", status_code=303)
+
+
+class LoginRequest(BaseModel):
+    password: str
+
+
+def _client(request: Request) -> str:
+    return request.headers.get("cf-connecting-ip") or (request.client.host if request.client else "unknown")
+
+
+@app.post("/api/login")
+def login(req: LoginRequest, request: Request) -> Response:
+    if not auth.configured():
+        return JSONResponse({"detail": "dashboard password not set"}, status_code=503)
+    client = _client(request)
+    if not auth.allowed_attempt(client):
+        return JSONResponse({"detail": "too many attempts, wait 15 minutes"}, status_code=429)
+    if not auth.check_password(req.password, os.environ["DASHBOARD_PASSWORD_HASH"]):
+        auth.record_failure(client)
+        return JSONResponse({"detail": "wrong password"}, status_code=401)
+    resp = JSONResponse({"ok": True})
+    resp.set_cookie(
+        auth.COOKIE,
+        auth.make_session(),
+        max_age=auth.SESSION_SECONDS,
+        httponly=True,
+        secure=True,
+        samesite="strict",
+        path="/",
+    )
+    return resp
+
+
+@app.post("/api/logout")
+def logout() -> Response:
+    resp = JSONResponse({"ok": True})
+    resp.delete_cookie(auth.COOKIE, path="/")
+    return resp
+
+
 _cache: dict[str, tuple[float, Any]] = {}
 
 
@@ -95,10 +161,8 @@ class KillRequest(BaseModel):
 
 
 @app.post("/api/kill")
-def set_kill(req: KillRequest, x_dashboard_token: str = Header(default="")) -> dict:
-    expected = os.environ.get("DASHBOARD_TOKEN", "")
-    if not expected or not secrets.compare_digest(x_dashboard_token, expected):
-        raise HTTPException(status_code=403, detail="dashboard token required")
+def set_kill(req: KillRequest) -> dict:
+    """Signed-in users (or the DASHBOARD_TOKEN header) only: enforced by require_login."""
     f = DATA / "KILL"
     if req.on:
         f.write_text(req.reason or "kill switch from dashboard")

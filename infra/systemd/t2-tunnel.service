@@ -1,0 +1,17 @@
+[Unit]
+Description=t2 Cloudflare Tunnel (t2.harcorp.biz -> dashboard on 127.0.0.1:8080; outbound only, no open ports)
+After=network-online.target t2-dashboard.service
+Wants=network-online.target
+# Starts only once the tunnel token has been saved (infra/set_server_secret.sh TUNNEL_TOKEN).
+ConditionPathExists=/usr/bin/cloudflared
+
+[Service]
+User=ubuntu
+EnvironmentFile=/opt/t2/.env
+ExecStartPre=/bin/sh -c 'test -n "$TUNNEL_TOKEN"'
+ExecStart=/usr/bin/cloudflared tunnel --no-autoupdate run
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

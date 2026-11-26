@@ -3,7 +3,9 @@ import sqlite3
 import pytest
 from fastapi.testclient import TestClient
 
-from t2.dashboard import api
+from t2.dashboard import api, auth
+
+PASSWORD = "correct horse battery"
 
 
 @pytest.fixture
@@ -12,6 +14,9 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(api, "NEWS_DB", tmp_path / "news.db")
     monkeypatch.setattr(api, "STATIC", tmp_path / "static")
     monkeypatch.setenv("DASHBOARD_TOKEN", "t0k")
+    monkeypatch.setenv("DASHBOARD_PASSWORD_HASH", auth.hash_password(PASSWORD))
+    monkeypatch.setenv("DASHBOARD_SESSION_KEY", "k" * 40)
+    auth._failures.clear()
     con = sqlite3.connect(tmp_path / "paper.db")
     con.executescript(
         """create table days (day text, equity real, gross real);
@@ -29,7 +34,9 @@ def client(tmp_path, monkeypatch):
         insert into items values ('et', 'press', 'u2', 'Markets today', '', '2026-11-27', '2026-11-27', '');"""
     )
     news.commit()
-    return TestClient(api.app)
+    c = TestClient(api.app, base_url="https://testserver")
+    assert c.post("/api/login", json={"password": PASSWORD}).status_code == 200
+    return c
 
 
 def test_book(client):
@@ -38,11 +45,12 @@ def test_book(client):
     assert b["positions"][0]["symbol"] == "TCS" and b["kill"] == {"on": False}
 
 
-def test_kill_switch_needs_token(client, tmp_path):
-    assert client.post("/api/kill", json={"on": True}).status_code == 403
-    r = client.post("/api/kill", json={"on": True, "reason": "test"}, headers={"x-dashboard-token": "t0k"})
+def test_kill_switch_needs_login_or_token(client, tmp_path):
+    anon = TestClient(api.app, base_url="https://testserver")
+    assert anon.post("/api/kill", json={"on": True}).status_code == 401
+    r = anon.post("/api/kill", json={"on": True, "reason": "test"}, headers={"x-dashboard-token": "t0k"})
     assert r.json()["on"] and (tmp_path / "KILL").exists()
-    client.post("/api/kill", json={"on": False}, headers={"x-dashboard-token": "t0k"})
+    client.post("/api/kill", json={"on": False})
     assert not (tmp_path / "KILL").exists()
     kinds = [e["kind"] for e in client.get("/api/book").json()["events"]]
     assert set(kinds) == {"kill_on", "kill_off"}
@@ -51,6 +59,42 @@ def test_kill_switch_needs_token(client, tmp_path):
 def test_news_search(client):
     assert [i["url"] for i in client.get("/api/news", params={"symbol": "infy"}).json()["items"]] == ["u1"]
     assert [i["url"] for i in client.get("/api/news", params={"q": "markets"}).json()["items"]] == ["u2"]
+
+
+def test_everything_needs_login(client):
+    anon = TestClient(api.app, base_url="https://testserver", follow_redirects=False)
+    assert anon.get("/api/book").status_code == 401
+    assert anon.get("/api/news").status_code == 401
+    r = anon.get("/book")
+    assert r.status_code == 303 and r.headers["location"] == "/login"
+    assert anon.post("/api/login", json={"password": "nope"}).status_code == 401
+    client.post("/api/logout")
+    assert client.get("/api/book").status_code == 401
+
+
+def test_login_rate_limit(client):
+    anon = TestClient(api.app, base_url="https://testserver")
+    codes = [anon.post("/api/login", json={"password": "bad"}).status_code for _ in range(6)]
+    assert codes[:5] == [401] * 5 and codes[5] == 429
+    assert anon.post("/api/login", json={"password": PASSWORD}).status_code == 429  # locked for the window
+
+
+def test_no_password_configured_means_closed(client, monkeypatch):
+    monkeypatch.delenv("DASHBOARD_PASSWORD_HASH")
+    assert client.get("/api/book").status_code == 503
+
+
+def test_session_tokens():
+    import os
+
+    os.environ["DASHBOARD_SESSION_KEY"] = "s" * 40
+    t = auth.make_session(now=1000.0)
+    assert auth.valid_session(t, now=1001.0)
+    assert not auth.valid_session(t, now=1000.0 + auth.SESSION_SECONDS + 1)
+    assert not auth.valid_session(t[:-1] + ("0" if t[-1] != "0" else "1"), now=1001.0)
+    assert auth.check_password("pw", auth.hash_password("pw")) and not auth.check_password(
+        "px", auth.hash_password("pw")
+    )
 
 
 def test_static_fallback_and_no_path_escape(client, tmp_path):

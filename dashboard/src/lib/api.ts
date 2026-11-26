@@ -9,6 +9,10 @@ export function useApi<T>(path: string, refreshMs = 30_000) {
   const load = useCallback(async () => {
     try {
       const r = await fetch(path, { cache: "no-store" });
+      if (r.status === 401) {
+        window.location.href = "/login";
+        return;
+      }
       if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
       setData((await r.json()) as T);
       setError(null);
