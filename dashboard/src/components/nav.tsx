@@ -21,7 +21,7 @@ async function signOut() {
 
 export function Nav() {
   const path = usePathname();
-  if (path.startsWith("/login")) return null;
+  if (path.startsWith("/login") || path.startsWith("/breeze")) return null;
   return (
     <nav className="flex gap-1 overflow-x-auto md:flex-col">
       {items.map(({ href, label, icon: Icon }) => {
