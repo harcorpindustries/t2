@@ -25,7 +25,7 @@ export default function BreezeCallback() {
       });
       if (r.status === 401) {
         sessionStorage.setItem("t2-apisession", session); // finish after signing in to the dashboard
-        window.location.href = "/login?next=/breeze/callback";
+        window.location.href = "/login?next=breeze";
         return;
       }
       sessionStorage.removeItem("t2-apisession");
