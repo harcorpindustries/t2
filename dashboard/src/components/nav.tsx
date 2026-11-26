@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { usePathname } from "next/navigation";
+import { Confirm } from "@/components/confirm";
 import { Activity, BarChart3, Brain, LayoutDashboard, ListOrdered, LogOut, Newspaper } from "lucide-react";
 import { cn } from "@/lib/cn";
 
@@ -42,12 +44,19 @@ export function Nav() {
 /** Red, at the bottom of the sidebar. Hidden on the sign-in and Breeze callback pages. */
 export function SignOut() {
   const path = usePathname();
+  const [asking, setAsking] = useState(false);
   if (path.startsWith("/login") || path.startsWith("/breeze")) return null;
   return (
-    <button type="button" onClick={signOut}
-      className="flex h-11 w-full items-center gap-3 rounded-md px-4 text-sm font-medium text-down hover:bg-down/15">
-      <LogOut className="size-4" />
-      Sign out
-    </button>
+    <>
+      <button type="button" onClick={() => setAsking(true)}
+        className="flex h-11 w-full items-center gap-3 rounded-md px-4 text-sm font-medium text-down hover:bg-down/15">
+        <LogOut className="size-4" />
+        Sign out
+      </button>
+      <Confirm open={asking} title="Sign out of T2?" confirmLabel="Sign out" danger
+        onConfirm={signOut} onCancel={() => setAsking(false)}>
+        You will need the dashboard password to sign in again. Paper trading keeps running on the server.
+      </Confirm>
+    </>
   );
 }
