@@ -1,7 +1,7 @@
 "use client";
 
-import { type Quality, useApi } from "@/lib/api";
-import { Card, ErrorNote, Loading, PageTitle, Stat, Table } from "@/components/ui";
+import { type Quality, pct, useApi } from "@/lib/api";
+import { Badge, Card, ErrorNote, Loading, PageTitle, Stat, Table } from "@/components/ui";
 import { HBars, SignedBars } from "@/components/charts";
 
 type Meta = {
@@ -10,7 +10,11 @@ type Meta = {
   recipe: { target: string; train_years: number; rounds: number; universe: string; extras: string[] };
   importance: { feature: string; splits: number }[];
   history: { trained_on: string; data_last_date: string; train_rows: number; code_commit: string; data_commit: string }[];
+  challengers?: Challenger[];
 };
+
+type Scores = { ic: number; ic_hit: number; long_hit: number; annual: number; sharpe: number; max_dd: number };
+type Challenger = { name: string; finished: string; years: number[]; verdict: string; params: number; neural: Scores; lightgbm: Scores };
 
 /** Plain names for the model's inputs (the rest keep their code names). */
 const LABEL: Record<string, string> = {
@@ -76,6 +80,23 @@ export default function ModelPage() {
               </Card>
             </div>
           </div>
+
+          <Card title="Challengers" action={<span className="text-xs text-muted-foreground">same years, same tests, same cash book</span>}>
+            {!(data.challengers ?? []).length ? (
+              <p className="py-6 text-sm text-muted-foreground">The first neural challenger is training on GitHub Actions. Its comparison appears here when it finishes.</p>
+            ) : (data.challengers ?? []).map((c) => (
+              <div key={c.finished + c.verdict} className="mb-6 last:mb-0">
+                <div className="mb-3 flex flex-wrap items-center gap-3 text-sm">
+                  <span className="font-medium">{c.name}</span>
+                  <span className="text-muted-foreground">{c.params.toLocaleString("en-IN")} parameters · tested {c.years[0]}–{c.years[c.years.length - 1]} · {c.finished}</span>
+                  <Badge kind={c.verdict.startsWith("neural") ? "ok" : "muted"}>{c.verdict}</Badge>
+                </div>
+                <Table head={["Model", "Rank IC", "IC > 0 days", "Top-10 up days", "Cash book / year", "Sharpe", "Max drawdown"]}
+                  rows={([["Neural", c.neural], ["LightGBM champion", c.lightgbm]] as [string, Scores][]).map(([n, r]) => [
+                    n, r.ic.toFixed(4), pct(r.ic_hit, 0, false), pct(r.long_hit, 0, false), pct(r.annual, 1), r.sharpe.toFixed(2), pct(r.max_dd, 1)])} />
+              </div>
+            ))}
+          </Card>
 
           <Card title="Training history">
             <Table head={["Trained on", "Data up to", "Rows", "Code", "Data"]}

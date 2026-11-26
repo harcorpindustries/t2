@@ -199,6 +199,27 @@ def summary_md(folds: list[dict], overall: dict, cfg: Config) -> str:
     return "\n".join(lines) + "\n"
 
 
+def load_panels(cfg: Config, data: Path, offline: bool = False) -> tuple[pl.DataFrame, pl.DataFrame]:
+    """(trade panel, train panel) for a recipe: every feature group it uses, limited to its universes."""
+    fno = "fno" in (cfg.universe, cfg.train_universe) or "fno" in cfg.extras
+    root = eod.fetch(data, fno=fno, offline=offline)
+    t0 = time.time()
+    full = eod.build(eod.load(root))
+    if "fno" in cfg.extras:
+        full = extra.add_fno(full, root)
+    if "news" in cfg.extras:
+        full = extra.add_news(full, extra.fetch_news(root, offline=offline))
+    members = eod.fno_members(root) if fno else None
+    pick = {"all": full, "fno": full.join(members, on=["date", "symbol"]) if members is not None else full}
+    panel, train_panel = pick[cfg.universe], pick[cfg.train_universe]
+    print(
+        f"panel {full.height:,} rows; trade universe {cfg.universe}: {panel.height:,} rows, "
+        f"{panel['symbol'].n_unique()} symbols; train universe {cfg.train_universe} ({time.time() - t0:.0f}s)",
+        flush=True,
+    )
+    return panel, train_panel
+
+
 def run(args: argparse.Namespace) -> None:
     cfg = Config(
         target=args.target,
@@ -209,22 +230,7 @@ def run(args: argparse.Namespace) -> None:
         train_universe=args.train_universe,
         extras=tuple(x for x in args.extras.split(",") if x),
     )
-    fno = "fno" in (cfg.universe, cfg.train_universe) or "fno" in cfg.extras
-    root = eod.fetch(Path(args.data), fno=fno, offline=args.offline)
-    t0 = time.time()
-    full = eod.build(eod.load(root))
-    if "fno" in cfg.extras:
-        full = extra.add_fno(full, root)
-    if "news" in cfg.extras:
-        full = extra.add_news(full, extra.fetch_news(root, offline=args.offline))
-    members = eod.fno_members(root) if fno else None
-    pick = {"all": full, "fno": full.join(members, on=["date", "symbol"]) if members is not None else full}
-    panel, train_panel = pick[cfg.universe], pick[cfg.train_universe]
-    print(
-        f"panel {full.height:,} rows; trade universe {cfg.universe}: {panel.height:,} rows, "
-        f"{panel['symbol'].n_unique()} symbols; train universe {cfg.train_universe} ({time.time() - t0:.0f}s)",
-        flush=True,
-    )
+    panel, train_panel = load_panels(cfg, Path(args.data), args.offline)
     last = panel["date"].max()
     assert isinstance(last, date)
     folds, preds = walk_forward(panel, list(range(args.from_year, last.year + 1)), cfg, train_panel)
