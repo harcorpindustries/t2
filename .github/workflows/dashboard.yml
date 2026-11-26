@@ -23,7 +23,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm install --no-audit --no-fund
+      # Exact versions from the lock file; without one, create it and keep it as an artifact to commit.
+      - run: |
+          if [ -f package-lock.json ]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
+      - if: hashFiles('dashboard/package-lock.json') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-lock
+          path: dashboard/package-lock.json
       - run: npm run build
       - run: tar -czf ../dashboard.tar.gz -C out .
       - uses: actions/upload-artifact@v4
