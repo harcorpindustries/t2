@@ -46,11 +46,11 @@ def test_learns_a_planted_signal():
 
 
 def test_resume_continues_exactly():
-    p = synthetic(n_sym=30, n_days=200)
+    p = synthetic(n_sym=60, n_days=200)  # training uses days with 50+ stocks
     cube = seqdata.build(p, ["f0", "f1"], "y5", date(2018, 1, 1), date(2019, 12, 31))
     days = seqdata.split_days(cube, cube.dates[-1].year, date(2018, 1, 1), embargo=10, valid_days=20)
     seqdata.scale(cube, days["train"])
-    c = neural.NNConfig(d_model=16, layers=1, lookback=6, steps=12, eval_every=4, warmup=3, batch_stocks=30)
+    c = neural.NNConfig(d_model=16, layers=1, lookback=6, steps=12, eval_every=4, warmup=3, batch_stocks=60)
     whole, _, _ = neural.train_fold(cube, days, c)
     _, _, ckpt = neural.train_fold(cube, days, c, budget_s=0.0)
     assert ckpt is not None and ckpt["meta"]["step"] == 1
