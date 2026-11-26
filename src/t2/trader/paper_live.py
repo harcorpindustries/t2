@@ -46,6 +46,12 @@ class BookConfig:
     slippage_bps: float
     roll_days: int
     risk: Limits
+    vehicle: str = "fut"  # "fut": stock futures (lots, margin, rolls) | "delivery": cash shares, fully paid
+    long_only: bool = False
+
+    @property
+    def kind_product(self) -> tuple[Kind, Product]:
+        return (Kind.FUT, Product.CARRY) if self.vehicle == "fut" else (Kind.EQ, Product.DELIVERY)
 
     @classmethod
     def load(cls, path: Path = CONFIG) -> BookConfig:
@@ -115,23 +121,35 @@ def latest_signals(today: date) -> pl.DataFrame:
 
 def plan(held: dict[str, dict], sig: pl.DataFrame, cfg: BookConfig, today: date) -> list[dict]:
     """Orders (as intents) that move the held book to today's target. Pure: no I/O."""
-    tradable = sig.filter(pl.col("lot_size").is_not_null()).sort("rank")
+    tradable = (sig.filter(pl.col("lot_size").is_not_null()) if cfg.vehicle == "fut" else sig).sort("rank")
     ranked = tradable["symbol"].to_list()
     info = {r["symbol"]: r for r in tradable.iter_rows(named=True)}
     longs = {s for s, p in held.items() if p["qty"] > 0}
     shorts = {s for s, p in held.items() if p["qty"] < 0}
     keep_l, keep_s, new_l, new_s = rebalance(longs, shorts, ranked, cfg.k, cfg.exit_k)
+    if cfg.long_only:
+        keep_s, new_s = set(), []
     out: list[dict] = []
     for s in sorted((longs - keep_l) | (shorts - keep_s)):
         out.append({"symbol": s, "qty": -held[s]["qty"], "reason": "exit"})
     for s in sorted(keep_l | keep_s):  # roll contracts close to expiry: close and reopen in the next month
         p = held[s]
-        if p["expiry"] and (date.fromisoformat(p["expiry"]) - today).days <= cfg.roll_days and s in info:
+        if (
+            cfg.vehicle == "fut"
+            and p["expiry"]
+            and (date.fromisoformat(p["expiry"]) - today).days <= cfg.roll_days
+            and s in info
+        ):
             out.append({"symbol": s, "qty": -p["qty"], "reason": "roll_close"})
             out.append({"symbol": s, "qty": p["qty"], "reason": "roll_open", "expiry": str(info[s]["fut_expiry"])})
     for side, names in ((1, new_l), (-1, new_s)):
         for s in names:
             r = info[s]
+            if cfg.vehicle == "delivery":
+                shares = int(cfg.notional_per_position // r["close"])
+                if shares > 0:
+                    out.append({"symbol": s, "qty": side * shares, "reason": "enter", "lot_size": 1, "expiry": None})
+                continue
             lot = int(r["lot_size"])
             lots = max(1, round(cfg.notional_per_position / (lot * r["close"])))
             out.append(
@@ -150,12 +168,18 @@ def fut(symbol: str) -> Contract:
     return Contract(symbol, Kind.FUT, tick=0.01)
 
 
-def make_book(held: dict[str, dict], live: dict[str, tuple[float, datetime]]) -> Book:
-    """What the risk manager sees: positions and last prices keyed by the futures contract."""
-    last = {fut(s).key: v[0] for s, v in live.items()}
-    pos = {
-        (fut(s).key, "carry"): (int(p["qty"]), float(last.get(fut(s).key) or p["avg_price"])) for s, p in held.items()
-    }
+def contract(symbol: str, cfg: BookConfig) -> Contract:
+    return fut(symbol) if cfg.vehicle == "fut" else Contract(symbol, Kind.EQ, tick=0.01)
+
+
+def make_book(held: dict[str, dict], live: dict[str, tuple[float, datetime]], cfg: BookConfig) -> Book:
+    """What the risk manager sees: positions and last prices keyed by the traded contract."""
+    product = cfg.kind_product[1].value
+    last = {contract(s, cfg).key: v[0] for s, v in live.items()}
+    pos = {}
+    for s, p in held.items():
+        key = contract(s, cfg).key
+        pos[(key, product)] = (int(p["qty"]), float(last.get(key) or p["avg_price"]))
     return Book(pos, 0.0, last)
 
 
@@ -178,7 +202,7 @@ def run_open(con: sqlite3.Connection, cfg: BookConfig, quotes: Quotes, now: date
     if (DATA / "KILL").exists():
         risk.engage_kill("KILL file present", now)
     c = cash(con, cfg)
-    book = make_book(held, live)
+    book = make_book(held, live, cfg)
     done = blocked = 0
     total_ch = 0.0
     for n, it in enumerate(intents):
@@ -191,22 +215,26 @@ def run_open(con: sqlite3.Connection, cfg: BookConfig, quotes: Quotes, now: date
         side = Side.BUY if it["qty"] > 0 else Side.SELL
         slip = cfg.slippage_bps / 1e4
         price = round(last * (1 + slip if side == Side.BUY else 1 - slip), 2)
-        contract = fut(s)
-        order = Order(contract, side, abs(it["qty"]), price, Product.CARRY, now + timedelta(milliseconds=250 * n))
+        kind, product = cfg.kind_product
+        order = Order(contract(s, cfg), side, abs(it["qty"]), price, product, now + timedelta(milliseconds=250 * n))
         decision = risk.check(order, book)
         if not decision.ok:
             con.execute("insert into events values (?,?,?)", (now.isoformat(), "blocked", f"{s}: {decision.reason}"))
             blocked += 1
             continue
-        ch = charges(Kind.FUT, Product.CARRY, side, abs(it["qty"]), price, today).total
-        c = apply_fill(con, s, it, price, c - ch, today)
+        ch = charges(kind, product, side, abs(it["qty"]), price, today).total
+        if cfg.vehicle == "delivery" and side == Side.BUY and abs(it["qty"]) * price + ch > c:
+            con.execute("insert into events values (?,?,?)", (now.isoformat(), "blocked", f"{s}: insufficient cash"))
+            blocked += 1
+            continue
+        c = apply_fill(con, s, it, price, c - ch, today, cfg.vehicle)
         con.execute(
             "insert into trades (ts, day, symbol, side, qty, price, charges, reason, signal_date)"
             " values (?,?,?,?,?,?,?,?,?)",
             (now.isoformat(), str(today), s, side.value, abs(it["qty"]), price, ch, it["reason"], signal_date),
         )
         held = positions(con)
-        book = make_book(held, live)
+        book = make_book(held, live, cfg)
         done += 1
         total_ch += ch
     set_cash(con, c)
@@ -224,8 +252,15 @@ def run_open(con: sqlite3.Connection, cfg: BookConfig, quotes: Quotes, now: date
     }
 
 
-def apply_fill(con: sqlite3.Connection, s: str, it: dict, price: float, c: float, today: date) -> float:
-    """Update the position and return cash after realised P&L (futures: no premium paid, P&L settles in cash)."""
+def apply_fill(
+    con: sqlite3.Connection, s: str, it: dict, price: float, c: float, today: date, vehicle: str = "fut"
+) -> float:
+    """Update the position and return cash.
+
+    Futures: nothing is paid up front; realised P&L settles in cash. Delivery: buys pay in full, sells receive.
+    """
+    if vehicle == "delivery":
+        c -= it["qty"] * price  # buy: qty > 0 pays; sell: qty < 0 receives
     row = con.execute("select qty, avg_price, lot_size, expiry from positions where symbol=?", (s,)).fetchone()
     qty, avg, lot, expiry = row if row else (0, 0.0, it.get("lot_size", 0), it.get("expiry"))
     dq = it["qty"]
@@ -235,7 +270,8 @@ def apply_fill(con: sqlite3.Connection, s: str, it: dict, price: float, c: float
         expiry = it.get("expiry", expiry)
     else:  # reduce / close
         closing = min(abs(dq), abs(qty))
-        c += closing * (price - avg) * (1 if qty > 0 else -1)
+        if vehicle == "fut":
+            c += closing * (price - avg) * (1 if qty > 0 else -1)
         qty += dq
         if qty == 0:
             avg = 0.0
@@ -256,12 +292,14 @@ def run_close(con: sqlite3.Connection, cfg: BookConfig, quotes: Quotes, now: dat
     c = cash(con, cfg)
     open_pnl = sum(p["qty"] * (px.get(s, (p["avg_price"],))[0] - p["avg_price"]) for s, p in held.items())
     gross = sum(abs(p["qty"]) * px.get(s, (p["avg_price"],))[0] for s, p in held.items())
+    # futures: equity = cash + open P&L. delivery: cash already paid for the shares, so add their market value
+    equity = c + (gross if cfg.vehicle == "delivery" else open_pnl)
     con.execute(
         "update days set cash=?, open_pnl=?, equity=?, gross=?, n_long=?, n_short=? where day=?",
         (
             c,
             open_pnl,
-            c + open_pnl,
+            equity,
             gross,
             sum(1 for p in held.values() if p["qty"] > 0),
             sum(1 for p in held.values() if p["qty"] < 0),
@@ -270,7 +308,7 @@ def run_close(con: sqlite3.Connection, cfg: BookConfig, quotes: Quotes, now: dat
     )
     con.commit()
     export(con)
-    return {"equity": c + open_pnl, "open_pnl": open_pnl, "gross": gross, "positions": len(held)}
+    return {"equity": equity, "open_pnl": open_pnl, "gross": gross, "positions": len(held)}
 
 
 def export(con: sqlite3.Connection) -> None:
