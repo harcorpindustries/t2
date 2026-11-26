@@ -298,3 +298,8 @@ def test_change_password(client, tmp_path, monkeypatch):
     anon = TestClient(api.app, base_url="https://testserver")
     assert anon.post("/api/login", json={"password": PASSWORD}).status_code == 401
     assert anon.post("/api/login", json={"password": "a much longer pass"}).status_code == 200
+
+
+def test_importance_maps_column_numbers_to_feature_names():
+    text = "tree\n\nfeature_importances:\nColumn_1=7\nColumn_0=3\n\nparameters:\n"
+    assert api.importance(text, ["lr", "r5"]) == [{"feature": "r5", "splits": 7}, {"feature": "lr", "splits": 3}]

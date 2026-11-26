@@ -520,8 +520,11 @@ def signal_quality() -> dict:
 
 
 # ----- model -----
-def importance(model_text: str) -> list[dict]:
-    """LightGBM writes split counts per feature at the end of model.txt; no ML library needed to read them."""
+def importance(model_text: str, names: list[str] | None = None) -> list[dict]:
+    """LightGBM writes split counts per feature at the end of model.txt; no ML library needed to read them.
+
+    A model trained from a plain array calls its inputs Column_<i>; `names` (the meta's feature list, same
+    order) turns those back into feature names."""
     if "feature_importances:" not in model_text:
         return []
     block = model_text.split("feature_importances:", 1)[1].strip().split("\n\n", 1)[0]
@@ -529,7 +532,10 @@ def importance(model_text: str) -> list[dict]:
     for line in block.splitlines():
         name, _, v = line.partition("=")
         if v.strip().isdigit():
-            out.append({"feature": name.strip(), "splits": int(v)})
+            name = name.strip()
+            if names and name.startswith("Column_") and name[7:].isdigit() and int(name[7:]) < len(names):
+                name = names[int(name[7:])]
+            out.append({"feature": name, "splits": int(v)})
     return sorted(out, key=lambda x: -x["splits"])
 
 
@@ -544,7 +550,7 @@ def _model() -> dict:
     meta = json.loads(Path(hf_hub_download(repo, f"{prefix}/meta.json", token=token)).read_text())
     try:
         text = Path(hf_hub_download(repo, f"{prefix}/model.txt", token=token)).read_text()
-        meta["importance"] = importance(text)
+        meta["importance"] = importance(text, meta.get("features"))
     except Exception:  # the page still shows the recipe without the chart
         meta["importance"] = []
     history = []
