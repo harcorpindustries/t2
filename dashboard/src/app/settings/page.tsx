@@ -7,6 +7,7 @@ import { Badge, Button, Card, ErrorNote, Loading, PageTitle, Table } from "@/com
 import { Confirm } from "@/components/confirm";
 import { useToast } from "@/components/toast";
 import { ThemeToggle } from "@/components/theme";
+import { PasswordForm, SecretsPanel } from "@/components/secrets";
 
 type Settings = {
   book: { capital?: number; k?: number; exit_k?: number; notional_per_position?: number; slippage_bps?: number;
@@ -51,7 +52,7 @@ export default function SettingsPage() {
 
   return (
     <>
-      <PageTitle sub="How the paper book is set up, phone alerts, sign-in sessions and shortcuts.">Settings</PageTitle>
+      <PageTitle sub="How the paper book is set up, phone alerts, API keys and secrets, password, sessions and shortcuts.">Settings</PageTitle>
       <ErrorNote error={error} onRetry={reload} />
       {!data && !error ? <Loading rows={6} /> : (
         <div className="grid gap-5 xl:grid-cols-2">
@@ -78,13 +79,7 @@ export default function SettingsPage() {
                 ? <Badge kind="ok"><CheckCircle2 className="size-3.5" />Telegram alerts on</Badge>
                 : <Badge kind="warn"><XCircle className="size-3.5" />Not set up</Badge>}
               <p className="text-sm text-muted-foreground">Breeze login reminder (08:45 and 09:10 on weekdays if not logged in), the open run&apos;s fills, the close summary, job failures and kill switch changes.</p>
-              {!data?.alerts && (
-                <ol className="list-decimal space-y-1.5 pl-5 text-sm text-muted-foreground">
-                  <li>In Telegram, message <span className="font-medium text-foreground">@BotFather</span>, send <code className="font-mono">/newbot</code> and copy the token.</li>
-                  <li>In your Mac terminal: <code className="font-mono text-xs">infra/set_server_secret.sh TELEGRAM_BOT_TOKEN</code></li>
-                  <li>Send any message to your new bot, then ask me to read your chat id and set <code className="font-mono text-xs">TELEGRAM_CHAT_ID</code>.</li>
-                </ol>
-              )}
+              {!data?.alerts && <p className="text-sm text-muted-foreground">Add the Telegram bot token and chat ID under API keys and secrets below.</p>}
               <Button variant="outline" onClick={testAlert}><BellRing className="size-4" />Send a test alert</Button>
             </div>
           </Card>
@@ -94,6 +89,11 @@ export default function SettingsPage() {
               <Button variant="danger" onClick={() => setAsking(true)} disabled={busy}><LogOut className="size-4" />Sign out everywhere else</Button>
               <div className="max-w-xs pt-2"><ThemeToggle /></div>
             </div>
+          </Card>
+          <Card title="API keys and secrets" className="xl:col-span-2"><SecretsPanel /></Card>
+          <Card title="Dashboard password" className="xl:col-span-2">
+            <p className="mb-4 text-sm text-muted-foreground">Other signed-in browsers stay signed in; use &quot;Sign out everywhere else&quot; afterwards if you want them out.</p>
+            <PasswordForm />
           </Card>
           <Card title="Keyboard shortcuts" className="xl:col-span-2">
             <div className="grid gap-x-8 gap-y-2 sm:grid-cols-2 lg:grid-cols-3">

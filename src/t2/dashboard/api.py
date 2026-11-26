@@ -31,6 +31,7 @@ from t2 import alerts
 from t2.dashboard import auth
 from t2.dashboard import breeze_session as bs
 from t2.dashboard import insights as ins
+from t2.dashboard import secrets as sec
 
 DATA = Path(os.environ.get("T2_PAPER_DIR", "/opt/t2/data"))
 NEWS_DB = Path(os.environ.get("T2_NEWS_DB", "/opt/t2/data/news.db"))
@@ -714,6 +715,92 @@ def revoke_sessions() -> Response:
 @app.post("/api/alerts/test")
 def alerts_test() -> dict:
     return {"sent": alerts.send("T2: test alert from the dashboard.")}
+
+
+# ----- API keys and secrets (write-only, password re-check) -----
+def _recheck(password: str, request: Request) -> None:
+    """Saving a secret needs the dashboard password again (a stolen cookie alone is not enough)."""
+    client = _client(request)
+    if not auth.allowed_attempt(client):
+        raise HTTPException(status_code=429, detail="too many attempts, wait 15 minutes")
+    if not auth.check_password(password, os.environ.get("DASHBOARD_PASSWORD_HASH", "")):
+        auth.record_failure(client)
+        raise HTTPException(status_code=403, detail="wrong dashboard password")
+
+
+@app.get("/api/secrets")
+def secrets_list() -> dict:
+    return {"items": sec.listing()}
+
+
+class SecretRequest(BaseModel):
+    key: str
+    value: str
+    password: str
+
+
+@app.post("/api/secrets")
+def secrets_set(req: SecretRequest, request: Request) -> dict:
+    value = req.value.strip()
+    err = sec.validate(req.key, value)
+    if err:
+        raise HTTPException(status_code=400, detail=err)
+    _recheck(req.password, request)
+    sec.store(req.key, value)
+    what = "cleared" if not value else "changed"
+    _record_event("secret_" + what, f"{req.key} {what} from the dashboard")
+    alerts.send(f"T2: {req.key} was {what} from the dashboard. If this was not you, change the dashboard password.")
+    return {"items": sec.listing()}
+
+
+class KeyRequest(BaseModel):
+    key: str
+
+
+@app.post("/api/secrets/test")
+def secrets_test(req: KeyRequest) -> dict:
+    if req.key not in sec.SECRETS:
+        raise HTTPException(status_code=400, detail="unknown setting")
+    ok, msg = sec.test(req.key)
+    return {"ok": ok, "message": msg}
+
+
+@app.post("/api/secrets/telegram-chats")
+def telegram_chats() -> dict:
+    """Chats that have messaged the bot (to fill in the chat ID)."""
+    import httpx
+
+    token = bs.read_env().get("TELEGRAM_BOT_TOKEN", "")
+    if not token:
+        raise HTTPException(status_code=400, detail="save the bot token first")
+    try:
+        r = httpx.get(f"https://api.telegram.org/bot{token}/getUpdates", timeout=10).json()
+    except (httpx.HTTPError, ValueError) as exc:
+        raise HTTPException(status_code=502, detail="Telegram did not answer") from exc
+    chats: dict[str, str] = {}
+    for u in r.get("result", []):
+        chat = (u.get("message") or {}).get("chat") or {}
+        if chat.get("id") is not None:
+            chats[str(chat["id"])] = chat.get("username") or chat.get("first_name") or chat.get("title") or ""
+    return {"chats": [{"id": k, "name": v} for k, v in chats.items()]}
+
+
+class PasswordRequest(BaseModel):
+    current: str
+    new: str
+
+
+@app.post("/api/password")
+def change_password(req: PasswordRequest, request: Request) -> dict:
+    if len(req.new) < 12:
+        raise HTTPException(status_code=400, detail="use at least 12 characters")
+    _recheck(req.current, request)
+    hashed = auth.hash_password(req.new)
+    bs.write_env_value("DASHBOARD_PASSWORD_HASH", hashed)
+    os.environ["DASHBOARD_PASSWORD_HASH"] = hashed
+    _record_event("password_changed", "dashboard password changed")
+    alerts.send("T2: the dashboard password was changed. If this was not you, reset it from the server.")
+    return {"ok": True}
 
 
 # ----- news -----

@@ -257,3 +257,44 @@ def test_breeze_session_needs_dashboard_login(client):
     # the callback form post is public but only redirects to the page, saving nothing
     r = anon.post("/breeze/callback", data={"apisession": "1234<script>"})
     assert r.status_code == 303 and r.headers["location"] == "/breeze/callback?apisession=1234script"
+
+
+def test_secrets_are_write_only_and_need_the_password(client, tmp_path, monkeypatch):
+    from t2.dashboard import breeze_session as bs
+
+    env = tmp_path / ".env"
+    env.write_text("TUNNEL_TOKEN=keep\n")
+    monkeypatch.setattr(bs, "ENV_FILE", env)
+    monkeypatch.setenv("T2_PAPER_DIR", str(tmp_path))
+    token = "123456789:" + "A" * 30
+    body = {"key": "TELEGRAM_BOT_TOKEN", "value": token, "password": "wrong"}
+    assert client.post("/api/secrets", json=body).status_code == 403
+    assert "TELEGRAM_BOT_TOKEN" not in env.read_text()
+    assert client.post("/api/secrets", json=body | {"password": PASSWORD}).status_code == 200
+    assert f"TELEGRAM_BOT_TOKEN={token}" in env.read_text() and "TUNNEL_TOKEN=keep" in env.read_text()
+    listed = {i["key"]: i for i in client.get("/api/secrets").json()["items"]}
+    assert listed["TELEGRAM_BOT_TOKEN"]["set"] and listed["TELEGRAM_BOT_TOKEN"]["hint"] == "…AAAA"
+    assert token not in client.get("/api/secrets").text  # never returned
+    assert "TUNNEL_TOKEN" not in listed  # not manageable from the browser
+    bad = [
+        {"key": "TUNNEL_TOKEN", "value": "x", "password": PASSWORD},
+        {"key": "HF_TOKEN", "value": "hf_a b", "password": PASSWORD},
+        {"key": "TELEGRAM_CHAT_ID", "value": "abc", "password": PASSWORD},
+        {"key": "BREEZE_API_SECRET", "value": 'a"b', "password": PASSWORD},
+    ]
+    for b in bad:
+        assert client.post("/api/secrets", json=b).status_code == 400
+    kinds = [e["kind"] for e in client.get("/api/book").json()["events"]]
+    assert "secret_changed" in kinds
+
+
+def test_change_password(client, tmp_path, monkeypatch):
+    from t2.dashboard import breeze_session as bs
+
+    monkeypatch.setattr(bs, "ENV_FILE", tmp_path / ".env")
+    assert client.post("/api/password", json={"current": PASSWORD, "new": "short"}).status_code == 400
+    assert client.post("/api/password", json={"current": "nope", "new": "a much longer pass"}).status_code == 403
+    assert client.post("/api/password", json={"current": PASSWORD, "new": "a much longer pass"}).status_code == 200
+    anon = TestClient(api.app, base_url="https://testserver")
+    assert anon.post("/api/login", json={"password": PASSWORD}).status_code == 401
+    assert anon.post("/api/login", json={"password": "a much longer pass"}).status_code == 200

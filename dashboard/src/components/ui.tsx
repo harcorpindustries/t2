@@ -80,7 +80,7 @@ export function Button({ children, onClick, variant = "primary", disabled, type 
   );
 }
 
-export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
+export function Input(props: React.ComponentProps<"input">) {
   return <input {...props}
     className={cn("h-10 min-w-0 rounded-md border border-input bg-transparent px-3 text-sm outline-none placeholder:text-muted-foreground",
       "focus:border-ring focus:ring-[3px] focus:ring-ring/50", props.className)} />;
