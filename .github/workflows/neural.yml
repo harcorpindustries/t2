@@ -1,0 +1,89 @@
+name: neural
+
+# Neural challenger (step 1): Mamba-style encoder per stock + attention across stocks, trained on CPU.
+# One job per test year (each trains on the 6 years before it), then a comparison with the LightGBM champion
+# on the same years, the same metrics and the same cash book. The summary goes to the run page and the model repo
+# (experiments/neural/), where the dashboard's Model page shows it.
+on:
+  workflow_dispatch:
+    inputs:
+      years:
+        description: Test years (JSON list)
+        default: '[2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026]'
+      steps:
+        description: Training steps per year
+        default: "3000"
+      d_model:
+        description: Model width
+        default: "128"
+      layers:
+        description: Mamba layers
+        default: "3"
+      lookback:
+        description: Days of history per stock
+        default: "40"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen
+      - name: CPU-only torch (not part of the server install)
+        run: uv pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - run: uv run --no-sync pytest -q tests/test_neural.py tests/test_seqdata.py
+
+  fold:
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      matrix:
+        year: ${{ fromJSON(inputs.years) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen
+      - run: uv pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Train and score ${{ matrix.year }}
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: >
+          uv run --no-sync python -m t2.models.neural fold --year ${{ matrix.year }}
+          --steps ${{ inputs.steps }} --d-model ${{ inputs.d_model }} --layers ${{ inputs.layers }}
+          --lookback ${{ inputs.lookback }} --out reports/neural/${{ matrix.year }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: neural-fold-${{ matrix.year }}
+          path: reports/neural/${{ matrix.year }}
+          retention-days: 90
+
+  compare:
+    needs: fold
+    if: always() && needs.check.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --frozen
+      - run: uv pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: neural-fold-*
+          path: reports/neural
+      - name: Compare with the LightGBM champion
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: uv run --no-sync python -m t2.models.neural compare --folds reports/neural --out reports/compare --publish
+      - uses: actions/upload-artifact@v4
+        with:
+          name: neural-compare
+          path: reports/compare
+          retention-days: 90

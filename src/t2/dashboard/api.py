@@ -564,6 +564,32 @@ def _model() -> dict:
     except Exception:
         pass
     meta["history"] = history
+    challengers = []
+    try:
+        tree = HfApi(token=token).list_repo_tree(repo, path_in_repo="experiments/neural")
+        for f in sorted((x.path for x in tree if x.path.endswith(".json")), reverse=True)[:5]:
+            r = json.loads(Path(hf_hub_download(repo, f, token=token)).read_text())
+            row = {
+                "name": "Neural (Mamba + cross-stock attention)",
+                "finished": r.get("finished"),
+                "years": r.get("years"),
+                "verdict": r.get("verdict"),
+                "params": r["neural"].get("params"),
+            }
+            for who in ("neural", "lightgbm"):
+                o, b = r[who]["overall"], r[who]["book"]["overall"]
+                row[who] = {
+                    "ic": o.get("ic_mean"),
+                    "ic_hit": o.get("ic_hit"),
+                    "long_hit": o.get("long_hit"),
+                    "annual": b.get("annual_return"),
+                    "sharpe": b.get("sharpe"),
+                    "max_dd": b.get("max_drawdown"),
+                }
+            challengers.append(row)
+    except Exception:  # no experiments yet
+        pass
+    meta["challengers"] = challengers
     return meta
 
 
