@@ -35,7 +35,18 @@ STATIC = Path(os.environ.get("T2_DASHBOARD_DIR", "/opt/t2/dashboard"))
 app = FastAPI(title="t2 dashboard", docs_url=None, redoc_url=None, openapi_url=None)
 # /breeze/callback is where ICICI sends the browser after login; the page itself saves nothing (the save is an
 # authenticated API call made from it), so it can load before the dashboard session is checked.
-PUBLIC = {"/login", "/login.html", "/api/login", "/favicon.ico", "/breeze/callback", "/breeze/callback.html"}
+PUBLIC = {
+    "/login",
+    "/login.html",
+    "/api/login",
+    "/breeze/callback",
+    "/breeze/callback.html",
+    # icons and the mascot (shown on the sign-in page; no data)
+    "/favicon.ico",
+    "/icon.png",
+    "/apple-icon.png",
+    "/mascot.png",
+}
 PUBLIC_PREFIX = "/_next/"  # the UI's static assets (no data in them)
 
 

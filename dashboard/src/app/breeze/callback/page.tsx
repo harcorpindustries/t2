@@ -44,6 +44,8 @@ export default function BreezeCallback() {
   return (
     <div className="flex min-h-[70vh] items-center justify-center">
       <div className="w-full max-w-md rounded-xl bg-card p-8 ring-1 ring-foreground/10">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/mascot.png" alt="T2 mascot" width={64} height={64} className="mb-4 size-16" />
         <div className="mb-4 flex items-center gap-3">
           {state === "working" && <Loader2 className="size-5 animate-spin" />}
           {state === "ok" && <CheckCircle2 className="size-5 text-good" />}
