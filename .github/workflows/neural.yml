@@ -15,19 +15,22 @@ on:
         default: '[2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026]'
       steps:
         description: Training steps per year
-        default: "10000"
+        default: "3000"
+      seeds:
+        description: Seeds per year, averaged (JSON list)
+        default: "[0, 1, 2]"
       d_model:
         description: Model width
-        default: "128"
-      layers:
-        description: Mamba layers
-        default: "3"
+        default: "64"
       lookback:
         description: Days of history per stock
         default: "60"
       news_dims:
         description: Headline vector inputs (0 = off)
         default: "32"
+      extra:
+        description: More fold options (e.g. --dropout 0.3 --weight-decay 0.1 --eval-every 100 --layers 3)
+        default: "--dropout 0.3 --weight-decay 0.1 --eval-every 100"
       from_run:
         description: Compare an earlier run's finished years instead of training (run ID)
         default: ""
@@ -54,14 +57,16 @@ jobs:
       fail-fast: false
       matrix:
         year: ${{ fromJSON(inputs.years) }}
+        seed: ${{ fromJSON(inputs.seeds) }}
     uses: ./.github/workflows/neural-stage.yml
     secrets: inherit
     with:
       year: ${{ matrix.year }}
-      out: neural-s1-${{ matrix.year }}
+      seed: ${{ matrix.seed }}
+      extra: ${{ inputs.extra }}
+      out: neural-s1-${{ matrix.year }}-${{ matrix.seed }}
       steps: ${{ inputs.steps }}
       d_model: ${{ inputs.d_model }}
-      layers: ${{ inputs.layers }}
       lookback: ${{ inputs.lookback }}
       news_dims: ${{ inputs.news_dims }}
 
@@ -73,15 +78,17 @@ jobs:
       fail-fast: false
       matrix:
         year: ${{ fromJSON(inputs.years) }}
+        seed: ${{ fromJSON(inputs.seeds) }}
     uses: ./.github/workflows/neural-stage.yml
     secrets: inherit
     with:
       year: ${{ matrix.year }}
-      prev: neural-s1-${{ matrix.year }}
-      out: neural-s2-${{ matrix.year }}
+      seed: ${{ matrix.seed }}
+      extra: ${{ inputs.extra }}
+      prev: neural-s1-${{ matrix.year }}-${{ matrix.seed }}
+      out: neural-s2-${{ matrix.year }}-${{ matrix.seed }}
       steps: ${{ inputs.steps }}
       d_model: ${{ inputs.d_model }}
-      layers: ${{ inputs.layers }}
       lookback: ${{ inputs.lookback }}
       news_dims: ${{ inputs.news_dims }}
 
@@ -92,16 +99,18 @@ jobs:
       fail-fast: false
       matrix:
         year: ${{ fromJSON(inputs.years) }}
+        seed: ${{ fromJSON(inputs.seeds) }}
     uses: ./.github/workflows/neural-stage.yml
     secrets: inherit
     with:
       year: ${{ matrix.year }}
-      prev: neural-s2-${{ matrix.year }}
-      out: neural-fold-${{ matrix.year }}
+      seed: ${{ matrix.seed }}
+      extra: ${{ inputs.extra }}
+      prev: neural-s2-${{ matrix.year }}-${{ matrix.seed }}
+      out: neural-fold-${{ matrix.year }}-${{ matrix.seed }}
       final: true
       steps: ${{ inputs.steps }}
       d_model: ${{ inputs.d_model }}
-      layers: ${{ inputs.layers }}
       lookback: ${{ inputs.lookback }}
       news_dims: ${{ inputs.news_dims }}
 

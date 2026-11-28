@@ -325,7 +325,7 @@ def cmd_fold(a: argparse.Namespace) -> None:
         return
     torch.set_num_threads(os.cpu_count() or 4)
     c = NNConfig(steps=a.steps, d_model=a.d_model, layers=a.layers, lookback=a.lookback, news_dims=a.news_dims,
-                 seed=a.seed)  # fmt: skip
+                 dropout=a.dropout, weight_decay=a.weight_decay, eval_every=a.eval_every, seed=a.seed)  # fmt: skip
     t0 = time.time()
     panel, _ = load_panels(RECIPE, Path(a.data), a.offline)
     feats = features(RECIPE)
@@ -408,16 +408,37 @@ def score_agreement(nn_preds: pl.DataFrame, lgb_preds: pl.DataFrame) -> float:
     return float(c) if isinstance(c, float) else float("nan")
 
 
-def model_name(cfg: dict) -> str:
+def seed_average(runs: list[tuple[int, pl.DataFrame]]) -> pl.DataFrame:
+    """One score per (date, symbol): the mean daily rank over the seeds trained for it (a single seed's own
+    scores are kept as they are)."""
+    if len({s for s, _ in runs}) <= 1:
+        return pl.concat([p.select("date", "symbol", "score") for _, p in runs])
+    ranked = pl.concat([daily_rank(p.select("date", "symbol", "score")).with_columns(pl.lit(s).alias("seed"))
+                        for s, p in runs])  # fmt: skip
+    return ranked.group_by("date", "symbol").agg(pl.col("r").mean().alias("score")).sort("date", "symbol")
+
+
+def model_name(cfg: dict, seeds: int = 1) -> str:
     news = cfg.get("news_dims", 0)
-    return "Neural (Mamba + cross-stock attention" + (f" + headline vectors {news}d)" if news else ")")
+    parts = [f"width {cfg.get('d_model', 128)}", f"dropout {cfg.get('dropout', 0.1):g}"]
+    if news:
+        parts.append(f"headline vectors {news}d")
+    if seeds > 1:
+        parts.append(f"{seeds} seeds averaged")
+    return "Neural (Mamba + cross-stock attention; " + ", ".join(parts) + ")"
 
 
 def cmd_compare(a: argparse.Namespace) -> None:
     folds = sorted(Path(a.folds).glob("*/fold.json"))
     nn_folds = [json.loads(f.read_text()) for f in folds]
-    nn_preds = pl.concat([pl.read_parquet(f.parent / "preds.parquet") for f in folds]).select("date", "symbol", "score")
-    years = sorted(f["metrics"]["year"] for f in nn_folds)
+    nn_preds = seed_average(
+        [
+            (f["config"].get("seed", 0), pl.read_parquet(p.parent / "preds.parquet"))
+            for f, p in zip(nn_folds, folds, strict=True)
+        ]
+    )
+    years = sorted({f["metrics"]["year"] for f in nn_folds})
+    seeds = sorted({f["config"].get("seed", 0) for f in nn_folds})
     panel, train_panel = load_panels(RECIPE, Path(a.data), a.offline)
     lgb_folds, lgb_preds = walk_forward(panel, years, RECIPE, train_panel)
     lgb_preds = lgb_preds.select("date", "symbol", "score")
@@ -437,7 +458,8 @@ def cmd_compare(a: argparse.Namespace) -> None:
     cfg = nn_folds[0]["config"]
     res: dict = {
         "years": years,
-        "name": model_name(cfg),
+        "name": model_name(cfg, len(seeds)),
+        "seeds": seeds,
         "neural": {
             "overall": overall(nn_preds),
             "book": book_stats(nn_preds, panel),
@@ -527,6 +549,9 @@ def main(argv: list[str] | None = None) -> int:
     f.add_argument("--layers", type=int, default=NNConfig.layers)
     f.add_argument("--lookback", type=int, default=NNConfig.lookback)
     f.add_argument("--news-dims", type=int, default=NNConfig.news_dims)
+    f.add_argument("--dropout", type=float, default=NNConfig.dropout)
+    f.add_argument("--weight-decay", type=float, default=NNConfig.weight_decay)
+    f.add_argument("--eval-every", type=int, default=NNConfig.eval_every)
     f.add_argument("--seed", type=int, default=0)
     f.add_argument("--resume", help="folder with an earlier job's checkpoint (or finished fold) for this year")
     f.add_argument("--budget-min", type=float, help="stop training after this many minutes of the job")

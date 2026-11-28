@@ -77,3 +77,14 @@ def test_blend_ranks_and_agreement():
     assert neural.blend(a, b, 1.0).sort("symbol")["score"].to_list() == [0.25, 0.5, 0.75, 1.0]
     assert neural.score_agreement(a, b) == pytest.approx(-1.0)
     assert neural.score_agreement(a, a) == pytest.approx(1.0)
+
+
+def test_seed_average_ranks_then_means():
+    import polars as pl
+
+    d = [date(2024, 1, 1)] * 3
+    a = pl.DataFrame({"date": d, "symbol": list("ABC"), "score": [1.0, 2.0, 3.0]})
+    b = pl.DataFrame({"date": d, "symbol": list("ABC"), "score": [30.0, 10.0, 20.0]})
+    m = neural.seed_average([(0, a), (1, b)]).sort("symbol")
+    assert np.allclose(m["score"].to_numpy(), [(1 / 3 + 1) / 2, (2 / 3 + 1 / 3) / 2, (1 + 2 / 3) / 2])
+    assert neural.seed_average([(0, a)])["score"].to_list() == [1.0, 2.0, 3.0]
