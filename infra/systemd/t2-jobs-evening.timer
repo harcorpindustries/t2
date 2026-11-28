@@ -1,0 +1,9 @@
+[Unit]
+Description=t2 evening data + signals jobs (19:45 IST on weekdays)
+
+[Timer]
+OnCalendar=Mon..Fri 19:45
+Persistent=false
+
+[Install]
+WantedBy=timers.target

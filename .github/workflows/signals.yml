@@ -1,6 +1,11 @@
 name: signals
 
 on:
+  # Runs as soon as the day's NSE data lands (the server starts nse-daily at 19:45 IST on weekdays, and again at
+  # 08:20 if signals are missing). GitHub's own schedule below is only a backup: it has started 8-9 hours late.
+  workflow_run:
+    workflows: [nse-daily]
+    types: [completed]
   schedule:
     - cron: "15 2 * * 1-5"  # 07:45 IST, after the night's NSE and GDELT updates, before the 09:15 open
   workflow_dispatch:
@@ -14,6 +19,7 @@ concurrency:
 
 jobs:
   score:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
