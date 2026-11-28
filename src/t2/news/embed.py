@@ -23,6 +23,7 @@ from pathlib import Path
 import numpy as np
 import polars as pl
 
+from t2.data import hf_store
 from t2.data.hf_store import DATASET_REPO
 
 MODEL = "BAAI/bge-small-en-v1.5"
@@ -74,18 +75,8 @@ def encode(titles: list[str], batch: int = 256) -> np.ndarray:
 
 
 def fetch(dest: Path, year: int | None = None, table: str = "news_gdelt") -> Path:
-    from huggingface_hub import snapshot_download
-
     pattern = f"{table}/year={year}/*" if year is not None and table == "news_gdelt" else f"{table}/*"
-    snapshot_download(
-        DATASET_REPO,
-        repo_type="dataset",
-        local_dir=dest,
-        allow_patterns=[pattern],
-        token=os.environ.get("HF_TOKEN"),
-        max_workers=8,
-    )
-    return dest
+    return hf_store.snapshot(dest, [pattern])
 
 
 def main(argv: list[str] | None = None) -> int:

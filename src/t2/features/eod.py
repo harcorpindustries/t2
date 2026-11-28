@@ -9,12 +9,11 @@ Targets start at the next session's open, which is the earliest we can act on a 
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import polars as pl
 
-from t2.data.hf_store import DATASET_REPO
+from t2.data import hf_store
 
 SERIES = ("EQ",)  # BE/BZ are trade-for-trade (no intraday), SME series are illiquid
 MIN_TURNOVER = 5e7  # Rs 5 crore 20-day median turnover
@@ -56,20 +55,10 @@ def fetch(dest: Path, fno: bool = False, offline: bool = False) -> Path:
 
     offline=True uses what is already in `dest` (local reruns).
     """
-    from huggingface_hub import snapshot_download
-
     if offline:
         return dest
     tables = ["eq_daily", "eq_delivery", *(["fo_daily"] if fno else [])]
-    snapshot_download(
-        DATASET_REPO,
-        repo_type="dataset",
-        local_dir=dest,
-        allow_patterns=[f"compact/{t}/*" for t in tables],
-        token=os.environ.get("HF_TOKEN"),
-        max_workers=8,
-    )
-    return dest
+    return hf_store.snapshot(dest, [f"compact/{t}/*" for t in tables])
 
 
 def table(root: Path, name: str) -> pl.LazyFrame:
