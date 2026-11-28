@@ -44,6 +44,24 @@ def upload_folder(folder: Path, message: str, retries: int = 5) -> None:
             time.sleep(10 * (i + 1))
 
 
+def snapshot(dest: Path, patterns: list[str], retries: int = 6, wait: float = 30.0) -> Path:
+    """Download the dataset files matching `patterns` into `dest`, retrying when the Hub rate-limits
+    (many parallel training jobs start at once and can hit 429 Too Many Requests)."""
+    from huggingface_hub import snapshot_download
+
+    for i in range(retries):
+        try:
+            snapshot_download(DATASET_REPO, repo_type="dataset", local_dir=dest, allow_patterns=patterns,
+                              token=os.environ.get("HF_TOKEN"), max_workers=8)  # fmt: skip
+            return dest
+        except Exception as exc:
+            if i == retries - 1:
+                raise
+            print(f"download failed ({type(exc).__name__}), retry {i + 1} in {wait * (i + 1):.0f}s", flush=True)
+            time.sleep(wait * (i + 1))
+    return dest
+
+
 FREE_PRIVATE_GB = 100.0
 WARN_GB = 70.0
 

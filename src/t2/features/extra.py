@@ -14,14 +14,13 @@ News (from GDELT articles tagged with the stock):
 
 from __future__ import annotations
 
-import os
 from datetime import UTC, datetime, time
 from pathlib import Path
 
 import numpy as np
 import polars as pl
 
-from t2.data.hf_store import DATASET_REPO
+from t2.data import hf_store
 from t2.features.eod import table
 
 FNO = ["fut_oi_chg1", "fut_oi_chg5", "basis_ann", "fo_turn_ratio", "pcr", "pcr_chg5"]
@@ -75,16 +74,7 @@ def add_fno(panel: pl.DataFrame, root: Path) -> pl.DataFrame:
 
 def fetch_news(dest: Path, offline: bool = False) -> Path:
     if not offline:
-        from huggingface_hub import snapshot_download
-
-        snapshot_download(
-            DATASET_REPO,
-            repo_type="dataset",
-            local_dir=dest,
-            allow_patterns=["news_gdelt/**"],
-            token=os.environ.get("HF_TOKEN"),
-            max_workers=8,
-        )
+        hf_store.snapshot(dest, ["news_gdelt/**"])
     return dest
 
 
