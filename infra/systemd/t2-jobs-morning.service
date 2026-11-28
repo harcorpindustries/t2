@@ -1,0 +1,11 @@
+[Unit]
+Description=t2: if the paper book's signals are missing, start the data and signals jobs before the open
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/opt/t2/app
+EnvironmentFile=/opt/t2/.env
+ExecStart=/usr/local/bin/uv run --frozen python -m t2.jobs morning

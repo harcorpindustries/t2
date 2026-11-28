@@ -49,10 +49,11 @@ def rupees(v: float | None) -> str:
 def open_summary(result: dict) -> str:
     if "skipped" in result:
         return f"T2 paper open: skipped ({result['skipped']})"
-    return (
+    msg = (
         f"T2 paper open: {result.get('filled', 0)} filled, {result.get('blocked', 0)} blocked, "
         f"charges {rupees(result.get('charges'))} (signals from {result.get('signal_date')})"
     )
+    return msg + (f"\nWARNING: {result['warning']}" if result.get("warning") else "")
 
 
 def close_summary(result: dict, prev_equity: float | None) -> str:

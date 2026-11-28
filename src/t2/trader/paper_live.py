@@ -104,15 +104,23 @@ def positions(con: sqlite3.Connection) -> dict[str, dict]:
     return {r[0]: dict(zip(cols, r, strict=True)) for r in con.execute("select * from positions where qty != 0")}
 
 
-def latest_signals(today: date, folder: str = "signals") -> pl.DataFrame:
-    """Most recent signals file for a session before today."""
+def signal_files(folder: str = "signals") -> list[tuple[date, str]]:
+    """(session, dataset path) of every signals file, oldest first."""
     files = [
         f.path
         for f in hf_store.api().list_repo_tree(hf_store.DATASET_REPO, repo_type="dataset", path_in_repo=folder)
         if f.path.endswith(".parquet")
     ]
-    dated = sorted((date.fromisoformat(f.split("date=")[1][:10]), f) for f in files)
-    dated = [x for x in dated if x[0] < today]
+    return sorted((date.fromisoformat(f.split("date=")[1][:10]), f) for f in files)
+
+
+def signal_dates(folder: str = "signals") -> list[date]:
+    return [d for d, _ in signal_files(folder)]
+
+
+def latest_signals(today: date, folder: str = "signals") -> pl.DataFrame:
+    """Most recent signals file for a session before today."""
+    dated = [x for x in signal_files(folder) if x[0] < today]
     if not dated:
         raise SystemExit("no signals yet")
     with tempfile.TemporaryDirectory() as tmp:
@@ -193,6 +201,9 @@ def run_open(con: sqlite3.Connection, cfg: BookConfig, quotes: Quotes, now: date
     signal_date = str(sig["date"][0])
     if (today - sig["date"][0]).days > 4:
         return {"skipped": f"signals are stale ({signal_date}); not trading on old picks"}
+    from t2.jobs import last_session
+
+    behind = sig["date"][0] < last_session(today)
     held = positions(con)
     flatten = (DATA / "FLATTEN").exists()
     if flatten:  # requested from the dashboard: sell everything held, open nothing new
@@ -253,13 +264,16 @@ def run_open(con: sqlite3.Connection, cfg: BookConfig, quotes: Quotes, now: date
         (DATA / "FLATTEN").unlink(missing_ok=True)
         con.execute("insert into events values (?,?,?)", (now.isoformat(), "flatten_done", f"{done} exits"))
         con.commit()
-    return {
+    out = {
         "signal_date": signal_date,
         "intents": len(intents),
         "filled": done,
         "blocked": blocked,
         "charges": total_ch,
     }
+    if behind:
+        out["warning"] = f"traded on picks from {signal_date}; the {last_session(today)} signals were not ready"
+    return out
 
 
 def apply_fill(

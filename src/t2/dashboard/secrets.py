@@ -30,6 +30,10 @@ SECRETS: dict[str, dict] = {
                          "help": "Your chat with the bot. Send the bot a message, then use 'Find my chat'."},
     "HF_TOKEN": {"group": "Hugging Face", "label": "Access token", "secret": True,
                  "help": "huggingface.co → Settings → Access Tokens (write access to the t2 repos)."},
+    "GITHUB_ACTIONS_TOKEN": {"group": "GitHub", "label": "Actions token", "secret": True,
+                             "help": "Lets the server start the data and signals jobs on time. github.com → Settings → "
+                                     "Developer settings → Fine-grained tokens: only the t2 repository, "
+                                     "permission Actions: read and write, nothing else."},
 }  # fmt: skip
 
 VALUE = re.compile(r"[\x21-\x7e]{1,512}")  # printable ASCII, no spaces
@@ -74,6 +78,8 @@ def validate(key: str, value: str) -> str | None:
         return "a bot token looks like 123456789:ABC…"
     if key == "HF_TOKEN" and not value.startswith("hf_"):
         return "a Hugging Face token starts with hf_"
+    if key == "GITHUB_ACTIONS_TOKEN" and not value.startswith(("github_pat_", "ghp_")):
+        return "a GitHub token starts with github_pat_ (fine-grained, preferred) or ghp_"
     return None
 
 
@@ -107,6 +113,11 @@ def test(key: str) -> tuple[bool, str]:
             return True, f"signed in as {who.get('name', '?')}"
         except Exception as exc:
             return False, f"rejected ({type(exc).__name__})"
+    if key == "GITHUB_ACTIONS_TOKEN":
+        from t2 import jobs
+
+        tok = env.get(key)
+        return jobs.check(tok) if tok else (False, "not set")
     if key.startswith("BREEZE_"):
         session = env.get("BREEZE_SESSION_TOKEN", "")
         if not bs.status().get("valid_today"):
