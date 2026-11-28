@@ -6,12 +6,13 @@ on:
   workflow_call:
     inputs:
       year: { type: number, required: true }
+      seed: { type: number, default: 0 }
+      extra: { type: string, default: "" }
       prev: { type: string, default: "" }
       out: { type: string, required: true }
       final: { type: boolean, default: false }
       steps: { type: string, required: true }
       d_model: { type: string, required: true }
-      layers: { type: string, required: true }
       lookback: { type: string, required: true }
       news_dims: { type: string, required: true }
 
@@ -29,14 +30,15 @@ jobs:
         with:
           name: ${{ inputs.prev }}
           path: prev
-      - name: Train ${{ inputs.year }}
+      - name: Train ${{ inputs.year }} (seed ${{ inputs.seed }})
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          EXTRA: ${{ inputs.extra }}  # e.g. --dropout 0.3 --weight-decay 0.1 (word-split, never evaluated)
         run: >
           uv run --no-sync python -m t2.models.neural fold --year ${{ inputs.year }}
-          --steps ${{ inputs.steps }} --d-model ${{ inputs.d_model }} --layers ${{ inputs.layers }}
+          --steps ${{ inputs.steps }} --d-model ${{ inputs.d_model }}
           --lookback ${{ inputs.lookback }} --news-dims ${{ inputs.news_dims }}
-          --budget-min 300 --out out
+          --seed ${{ inputs.seed }} $EXTRA --budget-min 300 --out out
           ${{ inputs.prev != '' && '--resume prev' || '' }} ${{ inputs.final && '--final' || '' }}
       - uses: actions/upload-artifact@v4
         with:
